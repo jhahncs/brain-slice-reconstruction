@@ -22,7 +22,7 @@ Only the `everyday` subset is necessary.
 In the orginal benchmark code of Breaking Bad dataset, it needs sample point cloud from mesh in each batch which is time-consuming. We pre-processing the mesh data and generate its point cloud data and its attribute.
 ```
 cd puzzlefusion-plusplus/
-python generate_pc_data +data.save_pc_data_path=data/pc_data/everyday/
+python generate_pc_data.py +data.save_pc_data_path=data/pc_data/everyday/
 ```
 We also provide the pre-processed data in [here](https://drive.google.com/file/d/1nCG18WEDuy2LoYt2pyt6UUgAZrsp4xWf/view?usp=drive_link).
 
