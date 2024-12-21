@@ -5,16 +5,17 @@ You need download data from their website and follow their data process [here](h
 
 After processing the data, ensure that you have a folder named `data` with the following structure:
 ```
-data
-├── breaking_bad
-│   ├── everyday
-│   │   ├── BeerBottle
-│   │   │   ├── ...
-│   │   ├── ...
-│   ├── everyday.train.txt
-│   ├── everyday.val.txt
-│   └── ...
-└── ...
+../Breaking-Bad-Dataset.github.io/
+└── data
+    ├── breaking_bad
+    │   ├── everyday
+    │   │   ├── BeerBottle
+    │   │   │   ├── ...
+    │   │   ├── ...
+    │   ├── everyday.train.txt
+    │   ├── everyday.val.txt
+    │   └── ...
+    └── ...
 ```
 Only the `everyday` subset is necessary.
 
