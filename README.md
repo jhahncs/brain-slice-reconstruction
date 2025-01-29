@@ -1,15 +1,15 @@
 <div align="center">
-<h1 align="center"> PuzzleFusion++: Auto-agglomerative 3D Fracture <br/> Assembly by Denoise and Verify
-</h1>
+<h2 align="center"> PuzzleFusion++: Auto-agglomerative 3D Fracture <br/> Assembly by Denoise and Verify
+</h2>
 
-### [Zhengqing Wang*<sup>1</sup>](https://eric-zqwang.github.io/) , [Jiacheng Chen*<sup>1</sup>](https://jcchen.me) , [Yasutaka Furukawa<sup>1,2</sup>](https://www2.cs.sfu.ca/~furukawa/)
+<h4 align="center"> ICLR 2025 </h4>
 
-### <sup>1</sup> Simon Fraser University <sup>2</sup> Wayve
+[Zhengqing Wang*<sup>1</sup>](https://eric-zqwang.github.io/) , [Jiacheng Chen*<sup>1</sup>](https://jcchen.me) , [Yasutaka Furukawa<sup>1,2</sup>](https://www2.cs.sfu.ca/~furukawa/)
 
-### [arXiv](https://arxiv.org/abs/2406.00259), [Project page](https://puzzlefusion-plusplus.github.io/)
+<sup>1</sup> Simon Fraser University <sup>2</sup> Wayve
+
+([arXiv](https://arxiv.org/abs/2406.00259), [Project page](https://puzzlefusion-plusplus.github.io/))
 </div>
-
-
 
 
 https://github.com/user-attachments/assets/24de5bc5-0a58-4010-bdb8-43173f5181f5
