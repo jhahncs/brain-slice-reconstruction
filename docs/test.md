@@ -21,6 +21,8 @@ By running with the checkpoints we provided in the [data preparation](../docs/da
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ```
 
+You can also test the denoiser only (*#iteration=1*) by run `scripts/inference_denoiser_only.sh`. The denoiser only do not need to load verifier weights and matching data.
+
 ## Visualization
 We use the [BlenderToolbox](https://github.com/HTDerekLiu/BlenderToolbox) to render our results. In addition, you need make sure you download the Breaking-Bad dataset everyday subset since we use mesh to visualize. 
 

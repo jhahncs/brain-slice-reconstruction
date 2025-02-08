@@ -25,6 +25,7 @@ This repository provides the official implementation of the paper [PuzzleFusion+
 - [Installation](#installation)
 - [Data preparation](#data-preparation)
 - [Getting started](#getting-started)
+- [FAQ](#faq)
 - [Citation](#citation)
 - [License](#license)
 
@@ -57,6 +58,8 @@ Please follow the [test guide](docs/test.md) for model inference, evaluation, an
 
 Please follow the [training guide](docs/training.md) for details about the training pipeline.
 
+## FAQ
+If you want to run this code on your custom dataset, please refer to the [FAQ](docs/faq.md) for more details.
 
 ## Citation
 
