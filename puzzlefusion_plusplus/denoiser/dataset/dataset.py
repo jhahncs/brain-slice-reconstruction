@@ -13,7 +13,8 @@ class GeometryLatentDataset(Dataset):
             cfg,
             data_dir,
             overfit,
-            data_fn
+            data_fn,
+            denoiser_only_flag = False
     ):
         self.cfg = cfg
         self.mode = data_fn
@@ -21,6 +22,7 @@ class GeometryLatentDataset(Dataset):
         self.data_files = sorted([f for f in os.listdir(self.data_dir) if f.endswith('.npz')])
         self.noise_scheduler = PiecewiseScheduler()
         self.max_num_part = self.cfg.data.max_num_part
+        self.denoiser_only_flag = denoiser_only_flag
 
         if overfit != -1:
             self.data_files = self.data_files[:overfit] 
@@ -52,7 +54,7 @@ class GeometryLatentDataset(Dataset):
                 'graph': graph,
             }
 
-            if self.mode == "test":
+            if self.mode == "test" and denoiser_only_flag is False:
                 matching_data_path = os.path.join(self.matching_data_path, str(data_id) + '.npz')
                 if not os.path.exists(matching_data_path):
                     continue
@@ -188,7 +190,7 @@ class GeometryLatentDataset(Dataset):
         part_pcs_gt = self._pad_data(np.stack(part_pcs_gt, axis=0)).astype(np.float32) # [P, N, 3]
 
         
-        if self.mode == 'test':        
+        if self.mode == 'test' and self.denoiser_only_flag is False:        
             gt_pc_by_area = self._anchor_coords(
                 data_dict['gt_pc_by_area'], 
                 pose_gt_t, 
@@ -309,12 +311,13 @@ def build_geometry_dataloader(cfg):
     return train_loader, val_loader
 
 
-def build_test_dataloader(cfg):
+def build_test_dataloader(cfg, denoiser_only_flag):
     data_dict = dict(
         cfg=cfg,
         data_dir=cfg.data.data_val_dir,
         overfit=cfg.data.overfit,
         data_fn="test",
+        denoiser_only_flag=denoiser_only_flag,
     )
 
     val_set = GeometryLatentDataset(**data_dict)

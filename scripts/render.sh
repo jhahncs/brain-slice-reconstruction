@@ -1,6 +1,6 @@
 python renderer/render_results.py \
     experiment_name=everyday_epoch2000_gpu4_bs64 \
-    inference_dir=code_clean_results_iter3 \
+    inference_dir=denoiser_only \
     renderer.num_samples=20 \
     renderer.output_path=results \
     renderer.blender.imgRes_x=512 \

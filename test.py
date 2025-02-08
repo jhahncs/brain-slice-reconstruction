@@ -15,8 +15,10 @@ def main(cfg):
     inference_dir = os.path.join(cfg.experiment_output_path, "inference", cfg.inference_dir)
     os.makedirs(inference_dir, exist_ok=True)
 
+    denoiser_only_flag = cfg.verifier.max_iters == 1
+
     # initialize data
-    test_loader = build_test_dataloader(cfg.denoiser)
+    test_loader = build_test_dataloader(cfg.denoiser, denoiser_only_flag)
 
     # load denoiser weights
     model = AutoAgglomerative(cfg)
@@ -33,9 +35,11 @@ def main(cfg):
          if k.startswith('encoder.')}
     )
 
-    # load verifier weights    
-    verifier_weights = torch.load(cfg.verifier.ckpt_path)['state_dict']
-    model.verifier.load_state_dict({k.replace('verifier.', ''): v for k, v in verifier_weights.items()})
+    if cfg.verifier.max_iters > 1:
+        # load verifier weights    
+        verifier_weights = torch.load(cfg.verifier.ckpt_path)['state_dict']
+        model.verifier.load_state_dict({k.replace('verifier.', ''): v for k, v in verifier_weights.items()})
+
     # initialize trainer
     trainer = pl.Trainer(accelerator=cfg.accelerator, max_epochs=1, logger=False)
     
