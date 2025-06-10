@@ -61,7 +61,7 @@ class GeometryPartDataset(Dataset):
                 continue
 
             self.data_list.append(sample)
-
+        #print("@@@@@@@@@@@@@@@@@@",len(self.data_list))
     @staticmethod
     def _recenter_pc(pc):
         """pc: [N, 3]"""
@@ -93,8 +93,12 @@ class GeometryPartDataset(Dataset):
         """
         recenter the fragments, and random rotate it to train ae
         """
+        
         data_dict = copy.deepcopy(self.data_list[idx])
         pcs = data_dict['part_pcs']
+
+
+
         num_parts = data_dict['num_parts']
 
         cur_pts = []
@@ -118,6 +122,10 @@ class GeometryPartDataset(Dataset):
 
 
 def build_geometry_dataloader(cfg):
+
+
+
+
     data_dict = dict(
         cfg=cfg,
         data_dir=cfg.data.data_dir,
@@ -133,7 +141,7 @@ def build_geometry_dataloader(cfg):
         shuffle=True,
         num_workers=cfg.data.num_workers,
         pin_memory=True,
-        drop_last=True,
+        drop_last=False, # jhahn
         persistent_workers=(cfg.data.num_workers > 0),
     )
 

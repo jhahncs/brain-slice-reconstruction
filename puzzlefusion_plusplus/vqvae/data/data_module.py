@@ -1,4 +1,4 @@
-import lightning.pytorch as pl
+import pytorch_lightning as pl
 from puzzlefusion_plusplus.vqvae.dataset.pc_dataset import build_geometry_dataloader
 
 

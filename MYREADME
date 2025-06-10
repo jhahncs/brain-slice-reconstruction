@@ -1,0 +1,18 @@
+rm -rdf /data/jhahn/data/shape_dataset/pc_data/tg
+rm -rdf /data/jhahn/data/shape_dataset/inference_results
+rm -rdf BlenderToolBox_render/
+rm -rdf renderer/BlenderToolBox_render/
+source /data/jhahn/slice_env/bin/activate
+source /data/jhahn/render_env/bin/activate
+
+python obj_2_pcd.py
+python generate_pc_data.py +data.save_pc_data_path=/data/jhahn/data/shape_dataset/pc_data/brain_lightsheet
+
+
+
+
+bpy coordinate
+
+화면 깊이 방향 x
+좌우 y
+상하 z

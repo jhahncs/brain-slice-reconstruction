@@ -1,6 +1,6 @@
 import torch
 from torch.nn import functional as F
-import lightning.pytorch as pl
+import pytorch_lightning as pl
 import hydra
 from puzzlefusion_plusplus.denoiser.model.modules.denoiser_transformer import DenoiserTransformer
 from tqdm import tqdm
@@ -96,7 +96,7 @@ class Denoiser(pl.LightningModule):
         part_pcs = data_dict["part_pcs"]
         part_valids = data_dict["part_valids"]
         latent, xyz = self._extract_features(part_pcs, part_valids, noisy_trans_and_rots)
-
+        
         pred_noise = self.denoiser(
             noisy_trans_and_rots, 
             timesteps, 

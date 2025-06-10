@@ -1,0 +1,18 @@
+python train_vqvae.py \
+    experiment_name=everyday_2000epoch \
+    data.batch_size=12 \
+    experiment_output_path=brain_lightsheet/autoencoder/everyday_2000epoch \
+    data.val_batch_size=12 \
+    +trainer.devices=2 \
+    +trainer.strategy=ddp
+
+
+	
+python train_denoiser.py \
+    experiment_name=everyday_epoch2000_bs64 \
+    data.batch_size=24 \
+    data.val_batch_size=24 \
+    experiment_output_path=brain_lightsheet/denoiser/everyday_2000epoch\
+    model.encoder_weights_path=brain_lightsheet/autoencoder/everyday_2000epoch/training/last.ckpt \
+    +trainer.devices=2 \
+    +trainer.strategy=ddp

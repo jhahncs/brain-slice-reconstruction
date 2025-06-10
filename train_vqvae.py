@@ -1,10 +1,11 @@
 import os
 import torch
 import hydra
-import lightning.pytorch as pl
+import pytorch_lightning as pl
 from puzzlefusion_plusplus.vqvae.data.data_module import DataModule
-from lightning.pytorch.callbacks import LearningRateMonitor
-
+from pytorch_lightning.callbacks import LearningRateMonitor
+import setproctitle
+setproctitle.setproctitle('train_vqvae')    
 
 def init_callbacks(cfg):
     checkpoint_monitor = hydra.utils.instantiate(cfg.checkpoint_monitor)
@@ -15,6 +16,7 @@ def init_callbacks(cfg):
 @hydra.main(version_base=None, config_path="config/ae", config_name="global_config")
 def main(cfg):
     # fix the seed
+    print(cfg)
     pl.seed_everything(cfg.train_seed, workers=True)
 
     # create directories for training outputs
@@ -44,4 +46,6 @@ def main(cfg):
 
 
 if __name__ == '__main__':
+    os.environ["CUDA_VISIBLE_DEVICES"]= "MIG-e5a11831-23aa-537c-9ebe-5e6cce8a2bce,MIG-6b03ab11-3f04-52a2-952d-e8d9df38ee72" 
+
     main()

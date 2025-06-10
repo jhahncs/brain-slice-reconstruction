@@ -4,12 +4,13 @@ wandb/
 BlenderToolBox_render/
 tools/
 data/
+models/
+nohup.out
 !/puzzlefusion_plusplus/vqvae/data
 .vscode/
 chamferdist/
 
 __pycache__
-*.ipynb
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

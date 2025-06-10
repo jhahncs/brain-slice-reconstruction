@@ -1,6 +1,6 @@
 import os
 import hydra
-import lightning.pytorch as pl
+import pytorch_lightning  as pl
 from puzzlefusion_plusplus.denoiser.dataset.dataset import build_test_dataloader
 import torch
 from puzzlefusion_plusplus.auto_aggl import AutoAgglomerative
@@ -13,6 +13,7 @@ def main(cfg):
 
     # create directories for inference outputs
     inference_dir = os.path.join(cfg.experiment_output_path, "inference", cfg.inference_dir)
+    print(inference_dir)
     os.makedirs(inference_dir, exist_ok=True)
 
     denoiser_only_flag = cfg.verifier.max_iters == 1

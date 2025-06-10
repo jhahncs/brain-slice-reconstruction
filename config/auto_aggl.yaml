@@ -34,20 +34,24 @@ test_seed: 123
 accelerator: gpu
 
 project_root_path: ${hydra:runtime.cwd}
-experiment_output_path: ${project_root_path}/output/denoiser/${experiment_name}
+#experiment_output_path: ${project_root_path}/output_p/denoiser/${experiment_name}
+experiment_output_path: /data/jhahn/data/shape_dataset/inference_results/
 
 inference_dir: null
 
 
 renderer:
-  output_path: /results/
-  mesh_path: ../Breaking-Bad-Dataset.github.io/data/
+  output_path: /data/jhahn/data/shape_dataset/inference_results/
+  mesh_path: /data/jhahn/data/shape_dataset/
+  #output_path: /data/jhahn/data/breaking_bad/everyday/results/
+  #mesh_path: /data/jhahn/data/breaking_bad/
   num_samples: 300
   duration: 6
   extend_endframes: 20
   min_parts: 2
   max_parts: 20
   category: all
+  ply_exists: True
   material: plastic
   save_gt: False
   random_sample: True

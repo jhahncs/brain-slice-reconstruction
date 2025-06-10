@@ -1,6 +1,6 @@
 import torch
 import hydra
-import lightning.pytorch as pl
+import pytorch_lightning as pl
 import copy
 import math
 
@@ -9,7 +9,8 @@ class FractureAE(pl.LightningModule):
         super(FractureAE, self).__init__()
         self.ae = hydra.utils.instantiate(cfg.ae.ae_name, cfg)
         self.cfg = cfg
-
+        self.save_hyperparameters()
+        
     def forward(self, data_dict):
         original_data_dict = copy.deepcopy(data_dict)
 

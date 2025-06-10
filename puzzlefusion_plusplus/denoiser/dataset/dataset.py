@@ -31,7 +31,7 @@ class GeometryLatentDataset(Dataset):
             self.matching_data_path = self.cfg.data.matching_data_path
         
         self.data_list = []
-
+        #self.data_list = self.data_list[:1]
         for file_name in tqdm(self.data_files):
             data_dict = np.load(os.path.join(self.data_dir, file_name))
             num_parts = data_dict["num_parts"].item()

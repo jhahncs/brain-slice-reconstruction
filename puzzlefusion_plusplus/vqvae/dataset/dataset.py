@@ -56,6 +56,7 @@ class GeometryPartDataset(Dataset):
 
     def _read_data(self, data_fn):
         """Filter out invalid number of parts."""
+        print(os.path.join(self.data_dir, data_fn))
         with open(os.path.join(self.data_dir, data_fn), 'r') as f:
             mesh_list = [line.strip() for line in f.readlines()]
             if self.category:
@@ -64,7 +65,8 @@ class GeometryPartDataset(Dataset):
                     if self.category in line.split('/')
                 ]
         data_list = []
-
+        print("-------------------------------------")
+        print('dataset',mesh_list)
         for mesh in mesh_list:
             mesh_dir = os.path.join(self.data_dir, mesh)
             if not os.path.isdir(mesh_dir):
@@ -72,14 +74,29 @@ class GeometryPartDataset(Dataset):
                 continue
             fracs = os.listdir(mesh_dir)
             fracs.sort()
+            
             for frac in fracs:
                 # we take both fractures and modes for training
+                #print('frac',fracs)
                 if 'fractured' not in frac and 'mode' not in frac:
                     continue
+                #print('frac',frac)
                 frac = os.path.join(mesh, frac)
-                num_parts = len(os.listdir(os.path.join(self.data_dir, frac)))
+                _files = os.listdir(os.path.join(self.data_dir, frac))
+                #_files = [f for f in _files if f.endswith(".obj") and f.startswith('piece_flat_')]
+                _files = [f for f in _files if f.endswith(".obj")]
+                _files.sort()
+
+                num_parts = len(_files)
+                if num_parts > self.max_num_part:
+                    _files = _files[:20]
+                    num_parts = len(_files)
+
+                print('folder:',frac, ' num_parts:',num_parts)
+                #print(_files)
                 if self.min_num_part <= num_parts <= self.max_num_part:
                     data_list.append(frac)
+        #print('data_list',len(data_list))
         return data_list
     
     def _are_meshes_connected(self, mesh_a, mesh_b):
@@ -156,7 +173,15 @@ class GeometryPartDataset(Dataset):
         # `data_folder`: xxx/plate/1d4093ad2dfad9df24be2e4f911ee4af/fractured_0
         data_folder = os.path.join(self.data_dir, data_folder)
         mesh_files = os.listdir(data_folder)
+        #mesh_files = [f for f in mesh_files if f.endswith('.obj') and f.startswith('piece_flat_')]
+        mesh_files = [f for f in mesh_files if f.endswith('.obj') ]
         mesh_files.sort()
+
+        if len(mesh_files) > self.max_num_part:
+            mesh_files = mesh_files[:20]
+
+
+        #print(self.min_num_part,len(mesh_files) ,self.max_num_part)
         if not self.min_num_part <= len(mesh_files) <= self.max_num_part:
             raise ValueError
 
@@ -169,14 +194,24 @@ class GeometryPartDataset(Dataset):
             trimesh.load(os.path.join(data_folder, mesh_file))
             for mesh_file in mesh_files
         ]
-
+        #for mesh_file in mesh_files:
+        #    m = trimesh.load(os.path.join(data_folder, mesh_file))
+        #   print('type',type(m),mesh_file)
+        
         # Check if the meshes are connected
         graph = self._check_connectivity(meshes)
-        
-        pcs = [
-                trimesh.sample.sample_surface(mesh, self.num_points)[0]
-                for mesh in meshes
-            ]
+        if isinstance(meshes[0] , trimesh.points.PointCloud):
+            pcs = [
+                    mesh.vertices[np.random.choice(np.arange(len(mesh.vertices)), self.num_points)]
+                    for mesh in meshes
+                ]
+        else:
+            pcs = [
+                    trimesh.sample.sample_surface(mesh, self.num_points)[0]
+                    for mesh in meshes
+                ]
+            
+
 
         return np.stack(pcs, axis=0), graph
 
@@ -230,6 +265,8 @@ class GeometryPartDataset(Dataset):
 
 
 def build_geometry_dataloader(cfg):
+
+    print("###############################")
     data_dict = dict(
         data_dir=cfg.data.mesh_data_dir,
         data_fn=cfg.data.data_fn.format('train'),
@@ -266,4 +303,18 @@ def build_geometry_dataloader(cfg):
         drop_last=False,
         persistent_workers=(cfg.data.num_workers > 0),
     )
-    return train_loader, val_loader
+
+
+    data_dict['data_fn'] = cfg.data.data_fn.format('test')
+    data_dict['shuffle_parts'] = False
+    test_set = GeometryPartDataset(**data_dict)
+    test_loader = DataLoader(
+        dataset=test_set,
+        batch_size=cfg.data.val_batch_size,
+        shuffle=False,
+        num_workers=cfg.data.num_workers,
+        pin_memory=True,
+        drop_last=False,
+        persistent_workers=(cfg.data.num_workers > 0),
+    )
+    return train_loader, val_loader, test_loader

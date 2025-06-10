@@ -10,6 +10,7 @@ import pdb
 from mathutils import Quaternion, Vector, Matrix
 import subprocess
 
+#from io_mesh_ply import import_ply
 
 class MyRenderer:
     def __init__(self, cfg):
@@ -36,7 +37,7 @@ class MyRenderer:
             self.cfg.renderer.blender.exposure,
             self.cfg.renderer.blender.use_GPU
         )
-
+        self.ply_exists = self.cfg.renderer.ply_exists
         # set shadding
         bpy.ops.object.shade_smooth() # Option1: Gouraud shading
         # bpy.ops.object.shade_flat() # Option2: Flat shading
@@ -76,26 +77,41 @@ class MyRenderer:
         1. self.min_part <= num_part <= self.max_part
         2. category == self.category
         """
-        all_files = [f for f in os.listdir(self.inference_path) if os.path.isdir(os.path.join(self.inference_path, f))]
         
+        all_files = [f for f in os.listdir(self.inference_path) if os.path.isdir(os.path.join(self.inference_path, f))]
+        #print(all_files)
         data_list = []
         for i in range(len(all_files)):
             mesh_data_path = self._read_mesh_file(all_files[i])
             mesh_data_path = os.path.join(self.mesh_path, mesh_data_path)
+            print('mesh_data_path',mesh_data_path)
+
+            _dir = os.listdir(mesh_data_path)
+            if self.ply_exists:
+                _dir = [d for d in _dir if d.endswith(".ply")]
+            _dir.sort()
+
             
+            num_parts = len(_dir)
+            if num_parts < 20:
+                continue
+            if num_parts > self.max_parts:
+                _dir = _dir[:20]
+                num_parts = len(_dir)
+
+            print(mesh_data_path, num_parts)
             if self.category == "all" or self.category == "":
-                num_parts = len(os.listdir(mesh_data_path))    
                 if self.min_parts <= num_parts <= self.max_parts:
                     data_list.append(all_files[i])
                     
-            if self.category.lower() in mesh_data_path.lower():
-                num_parts = len(os.listdir(mesh_data_path))    
+            if self.category.lower() in mesh_data_path.lower():                  
                 if self.min_parts <= num_parts <= self.max_parts:
                     data_list.append(all_files[i])
 
         if self.num_samples != -1:
             random.seed(42)
             data_list = random.sample(data_list, min(self.num_samples, len(data_list)))
+        #print('data_list',data_list)
         return data_list
     
 
@@ -130,17 +146,33 @@ class MyRenderer:
         file_path = self._read_mesh_file(file)
 
         mesh_dir_path = os.path.join(self.mesh_path, file_path)
-        obj_files = [file for file in os.listdir(mesh_dir_path) if file.endswith('.obj')]
+        if self.ply_exists:
+            obj_files = [file for file in os.listdir(mesh_dir_path) if file.endswith('.ply')]
+            #obj_files =  [file for file in os.listdir(mesh_dir_path) if file.endswith('.obj')]
+            #obj_files = [file for file in obj_files if 'flat_pcd' not in file]
+        else:
+            obj_files = [file for file in os.listdir(mesh_dir_path) if file.endswith('.obj')]
 
         parts = []
         obj_files.sort()
-
+        
+        if len(obj_files) > self.max_parts:
+            obj_files = obj_files[:20]
+            
         for i, obj_file in enumerate(obj_files):
             meshPath = os.path.join(mesh_dir_path, obj_file)
-            location = (-0.57, 0, 0.242)
-            # location = (-0, 0, 0)
+            #print(meshPath)
+            # location = (-0.57, 0, 0.242)
+            location = (-0, 0, 0)
             rotation = (0, 0, 0)
-            part = bt.readMesh(meshPath, location, rotation, scale=self.scale)
+            
+            try:
+                part = bt.readMesh(meshPath, location, rotation, scale=self.scale)
+
+            except:
+                
+                return None                
+            
             # bt.subdivision(part, level = 2)
             RGB = np.array(self.cfg.renderer.colors[i]) / 255.0
             RGBA = np.append(RGB, 1.0)
@@ -148,6 +180,7 @@ class MyRenderer:
             # meshColor = bt.colorObj(RGBA, 0.5, 1.0, 1.0, 0.0, 2.0)
             meshColor = bt.colorObj(RGBA)
             bt.setMat_plastic(part, meshColor)
+            
             # AOStrength = 0.5
             # metalVal = 0.9
             # bt.setMat_metal(part, meshColor, AOStrength, metalVal)
@@ -266,13 +299,13 @@ class MyRenderer:
         
         # Compile frames into a video using FFmpeg
         command = [
-            'ffmpeg', 
+            '/usr/bin/ffmpeg', 
             '-framerate', f'{frame / 8}',  
             '-i', f'{imgs_path}/%04d.png',  # Adjust the pattern based on how your frames are named
-            '-vf', 'tpad=stop_mode=clone:stop_duration=2',  # Hold the last frame for 2 seconds
-            '-c:v', 'libx264', 
+            #'-vf', 'tpad=stop_mode=clone:stop_duration=2',  # Hold the last frame for 2 seconds
+            #'-c:v', 'libx264', 
             '-pix_fmt', 'yuv420p', 
-            '-crf', '17',  # Adjust CRF (lower means higher quality)
+            #'-crf', '17',  # Adjust CRF (lower means higher quality)
             video_path
         ]
         subprocess.run(command, check=True)

@@ -1,6 +1,6 @@
 import torch
 from torch.nn import functional as F
-import lightning.pytorch as pl
+import pytorch_lightning as pl
 import hydra
 from puzzlefusion_plusplus.denoiser.model.modules.denoiser_transformer import DenoiserTransformer
 from puzzlefusion_plusplus.verifier.model.modules.verifier_transformer import VerifierTransformer

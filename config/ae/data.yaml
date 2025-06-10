@@ -1,11 +1,45 @@
 data:
   batch_size: 64
   val_batch_size: 64
-  num_workers: 6
-  data_fn: "everyday.{}.txt"
-  data_dir: ./data/pc_data/everyday/train/
-  data_val_dir: ./data/pc_data/everyday/val/
-  mesh_data_dir: ../Breaking-Bad-Dataset.github.io/data/
+  num_workers: 64 #6
+  
+  
+    
+  data_fn: "brain_lightsheet.{}.txt"
+  data_dir: /data/jhahn/data/shape_dataset/pc_data/brain_lightsheet/train/
+  data_val_dir: /data/jhahn/data/shape_dataset/pc_data/brain_lightsheet/val/
+  mesh_data_dir: /data/jhahn/data/shape_dataset/data
+  
+
+
+  #data_fn: "shape.{}.txt"
+  #data_dir: /data/jhahn/data/shape_dataset/pc_data/train/
+  #data_val_dir: /data/jhahn/data/shape_dataset/pc_data/val/
+  #mesh_data_dir: /data/jhahn/data/shape_dataset/data
+  
+
+  #data_fn: "brain.{}.txt"
+  #data_dir: /data/jhahn/data/shape_dataset/pc_data/train/
+  #data_val_dir: /data/jhahn/data/shape_dataset/pc_data/val/
+  #mesh_data_dir: /data/jhahn/data/shape_dataset/data
+  
+  #data_fn: "brain_block.{}.txt"
+  #data_dir: /data/jhahn/data/shape_dataset/pc_data/brain_block/train/
+  #data_val_dir: /data/jhahn/data/shape_dataset/pc_data/brain_block/val/
+  #mesh_data_dir: /data/jhahn/data/shape_dataset/data
+  
+
+  #data_fn: "tg.{}.txt"
+  #data_dir: /data/jhahn/data/shape_dataset/pc_data/tg/train/
+  #data_val_dir: /data/jhahn/data/shape_dataset/pc_data/tg/val/
+  #mesh_data_dir: /data/jhahn/data/shape_dataset/data
+  
+
+  #data_fn: "everyday.{}.txt"
+  #data_dir: /data/jhahn/data/breaking_bad/everyday/pc_data/train/
+  #data_val_dir: /data/jhahn/data/breaking_bad/everyday/pc_data/val/
+  #mesh_data_dir: /data/jhahn/data/breaking_bad
+  
   rot_range: -1
   overfit: -1
   data_keys:
