@@ -66,9 +66,10 @@ class GeometryPartDataset(Dataset):
                 ]
         data_list = []
         print("-------------------------------------")
-        print('dataset',mesh_list)
+        #print('dataset',mesh_list)
         for mesh in mesh_list:
             mesh_dir = os.path.join(self.data_dir, mesh)
+            print('obj',mesh_dir)
             if not os.path.isdir(mesh_dir):
                 print(f'{mesh} does not exist')
                 continue
@@ -85,7 +86,7 @@ class GeometryPartDataset(Dataset):
                 _files = os.listdir(os.path.join(self.data_dir, frac))
                 #_files = [f for f in _files if f.endswith(".obj") and f.startswith('piece_flat_')]
                 _files = [f for f in _files if f.endswith(".obj")]
-                _files.sort()
+                _files.sort(key = lambda k: int(k.replace('.obj',"")))
 
                 num_parts = len(_files)
                 if num_parts > self.max_num_part:
@@ -175,8 +176,9 @@ class GeometryPartDataset(Dataset):
         mesh_files = os.listdir(data_folder)
         #mesh_files = [f for f in mesh_files if f.endswith('.obj') and f.startswith('piece_flat_')]
         mesh_files = [f for f in mesh_files if f.endswith('.obj') ]
-        mesh_files.sort()
-
+        #mesh_files.sort()
+        mesh_files.sort(key = lambda k: int(k.replace('.obj',"")))
+        print(data_folder,mesh_files)
         if len(mesh_files) > self.max_num_part:
             mesh_files = mesh_files[:20]
 
@@ -266,7 +268,7 @@ class GeometryPartDataset(Dataset):
 
 def build_geometry_dataloader(cfg):
 
-    print("###############################")
+    #print("###############################")
     data_dict = dict(
         data_dir=cfg.data.mesh_data_dir,
         data_fn=cfg.data.data_fn.format('train'),

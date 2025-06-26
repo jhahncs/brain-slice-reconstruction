@@ -20,7 +20,7 @@ ckpt_path: null
 experiment_name: null
 train_seed: 123
 test_seed: 123
-
+device: null
 
 logger:
   # https://pytorch-lightning.readthedocs.io/en/stable/extensions/generated/pytorch_lightning.loggers.WandbLogger.html

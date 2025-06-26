@@ -99,7 +99,7 @@ class DenoiserTransformer(nn.Module):
             nn.SiLU(),
             nn.Linear(self.model_channels, self.model_channels // 2),
             nn.SiLU(),
-            nn.Linear(self.model_channels // 2, 4),
+            nn.Linear(self.model_channels // 2, 4), # jhahn
         )
 
 

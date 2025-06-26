@@ -1,7 +1,7 @@
 python test.py experiment_name=everyday_epoch2000_bs64 \
     denoiser.data.val_batch_size=20 \
     denoiser.data.data_val_dir=/data/jhahn/data/shape_dataset/pc_data/brain_lightsheet/test \
-    denoiser.ckpt_path=/home/jhahn/puzzlefusion-plusplus/brain_lightsheet/denoiser/everyday_epoch2000_bs64/training/last.ckpt \
+    denoiser.ckpt_path=/home/jhahn/puzzlefusion-plusplus/brain_lightsheet/denoiser/everyday_2000epoch/training/last.ckpt \
     inference_dir=brain_lightsheet_from_100 \
     verifier.max_iters=1 \
 	

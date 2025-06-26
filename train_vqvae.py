@@ -15,8 +15,18 @@ def init_callbacks(cfg):
 
 @hydra.main(version_base=None, config_path="config/ae", config_name="global_config")
 def main(cfg):
+
+    import torch
+    if torch.cuda.is_available():
+        device = torch.device("cuda:0")
+        torch.cuda.set_device(device)
+    else:
+        device = torch.device("cpu")
+        
     # fix the seed
+    cfg.device = "cuda:0"
     print(cfg)
+    
     pl.seed_everything(cfg.train_seed, workers=True)
 
     # create directories for training outputs

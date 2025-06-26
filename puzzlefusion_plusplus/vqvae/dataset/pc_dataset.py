@@ -6,6 +6,49 @@ from scipy.spatial.transform import Rotation as R
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 import copy
+import torch
+from torch.nn.functional import normalize
+
+from pytorch3d.transforms import Transform3d
+from pytorch3d.transforms.transform3d import (
+    Rotate,
+    RotateAxisAngle,
+    Scale,
+    Transform3d,
+    Translate,
+)
+
+
+def quaternion_to_matrix(quaternions: torch.Tensor) -> torch.Tensor:
+    """
+    Convert rotations given as quaternions to rotation matrices.
+
+    Args:
+        quaternions: quaternions with real part first,
+            as tensor of shape (..., 4).
+
+    Returns:
+        Rotation matrices as tensor of shape (..., 3, 3).
+    """
+    r, i, j, k = torch.unbind(quaternions, -1)
+    # pyre-fixme[58]: `/` is not supported for operand types `float` and `Tensor`.
+    two_s = 2.0 / (quaternions * quaternions).sum(-1)
+
+    o = torch.stack(
+        (
+            1 - two_s * (j * j + k * k),
+            two_s * (i * j - k * r),
+            two_s * (i * k + j * r),
+            two_s * (i * j + k * r),
+            1 - two_s * (i * i + k * k),
+            two_s * (j * k - i * r),
+            two_s * (i * k - j * r),
+            two_s * (j * k + i * r),
+            1 - two_s * (i * i + j * j),
+        ),
+        -1,
+    )
+    return o.reshape(quaternions.shape[:-1] + (3, 3))
 
 class GeometryPartDataset(Dataset):
     """Geometry part assembly dataset.
@@ -22,11 +65,13 @@ class GeometryPartDataset(Dataset):
         category='',
         rot_range=-1,
         overfit=-1,
+        device = None
     ):
         self.cfg = cfg
         self.category = category if category.lower() != 'all' else ''
         self.data_dir = data_dir
         self.data_fn = data_fn
+        self.device = device
 
         self.data_files = sorted([f for f in os.listdir(self.data_dir) if f.endswith('.npz')])
 
@@ -69,8 +114,29 @@ class GeometryPartDataset(Dataset):
         pc = pc - centroid[None]
         return pc, centroid
 
+
+
+
     @staticmethod
-    def _rotate_pc(pc):
+    def _rotate_pc(pc, device):
+        """pc: [N, 3]"""
+        pc = torch.from_numpy(pc).float()
+
+        _mean = torch.mean(pc, axis=0)
+        tr = Translate(-_mean[0],-_mean[1],-_mean[2], dtype=torch.float32)
+        tr_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32)
+
+        
+        quat_gt = torch.tensor([torch.rand(1),1,0,0])
+        quat_gt = normalize(quat_gt, p=1.0, dim = 0)
+        rr = Rotate(quaternion_to_matrix(quat_gt), dtype=torch.float32)
+        t = Transform3d().compose(tr).compose(rr).compose(tr_r)
+        pc = t.transform_points(pc)#.to(torch.float).to(device)
+        
+        return pc.cpu().numpy(), quat_gt.cpu().numpy()
+
+    @staticmethod
+    def _rotate_pc_backup(pc):
         """pc: [N, 3]"""
         rot_mat = R.random().as_matrix()
         pc = (rot_mat @ pc.T).T
@@ -78,7 +144,6 @@ class GeometryPartDataset(Dataset):
         # we use scalar-first quaternion
         quat_gt = quat_gt[[3, 0, 1, 2]]
         return pc, quat_gt
-
 
     def _pad_data(self, data):
         """Pad data to shape [`self.max_num_part`, data.shape[1], ...]."""
@@ -105,7 +170,7 @@ class GeometryPartDataset(Dataset):
         for i in range(num_parts):
             pc = pcs[i]
             pc, _ = self._recenter_pc(pc)
-            pc, _ = self._rotate_pc(pc)
+            pc, _ = self._rotate_pc(pc, self.device)
             cur_pts.append(pc)
             
         cur_pts = self._pad_data(np.stack(cur_pts, axis=0))  # [P, N, 3]
@@ -133,6 +198,7 @@ def build_geometry_dataloader(cfg):
         category=cfg.data.category,
         rot_range=cfg.data.rot_range,
         overfit=cfg.data.overfit,
+        device = cfg.device
     )
     train_set = GeometryPartDataset(**data_dict)
     train_loader = DataLoader(

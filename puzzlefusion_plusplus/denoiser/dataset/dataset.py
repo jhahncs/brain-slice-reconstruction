@@ -6,6 +6,49 @@ from tqdm import tqdm
 import copy
 from puzzlefusion_plusplus.denoiser.model.modules.custom_diffusers import PiecewiseScheduler
 import torch
+import torch
+from torch.nn.functional import normalize
+
+from pytorch3d.transforms import Transform3d
+from pytorch3d.transforms.transform3d import (
+    Rotate,
+    RotateAxisAngle,
+    Scale,
+    Transform3d,
+    Translate,
+)
+
+
+def quaternion_to_matrix(quaternions: torch.Tensor) -> torch.Tensor:
+    """
+    Convert rotations given as quaternions to rotation matrices.
+
+    Args:
+        quaternions: quaternions with real part first,
+            as tensor of shape (..., 4).
+
+    Returns:
+        Rotation matrices as tensor of shape (..., 3, 3).
+    """
+    r, i, j, k = torch.unbind(quaternions, -1)
+    # pyre-fixme[58]: `/` is not supported for operand types `float` and `Tensor`.
+    two_s = 2.0 / (quaternions * quaternions).sum(-1)
+
+    o = torch.stack(
+        (
+            1 - two_s * (j * j + k * k),
+            two_s * (i * j - k * r),
+            two_s * (i * k + j * r),
+            two_s * (i * j + k * r),
+            1 - two_s * (i * i + k * k),
+            two_s * (j * k - i * r),
+            two_s * (i * k - j * r),
+            two_s * (j * k + i * r),
+            1 - two_s * (i * i + j * j),
+        ),
+        -1,
+    )
+    return o.reshape(quaternions.shape[:-1] + (3, 3))
 
 class GeometryLatentDataset(Dataset):
     def __init__(
@@ -32,6 +75,7 @@ class GeometryLatentDataset(Dataset):
         
         self.data_list = []
         #self.data_list = self.data_list[:1]
+        #print("@@@@@@@@@@@@@",self.data_files)
         for file_name in tqdm(self.data_files):
             data_dict = np.load(os.path.join(self.data_dir, file_name))
             num_parts = data_dict["num_parts"].item()
@@ -118,7 +162,7 @@ class GeometryLatentDataset(Dataset):
         pc = pc - centroid[None]
         return pc, centroid
     
-    def _rotate_pc(self, pc):
+    def _rotate_pc_backup(self, pc):
         """
         pc: [N, 3]
         """
@@ -129,6 +173,28 @@ class GeometryLatentDataset(Dataset):
         # we use scalar-first quaternion
         quat_gt = quat_gt[[3, 0, 1, 2]]
         return pc, quat_gt
+
+
+
+    @staticmethod
+    def _rotate_pc(pc):
+        """pc: [N, 3]"""
+        pc = torch.from_numpy(pc).float()
+
+        _mean = torch.mean(pc, axis=0)
+        tr = Translate(-_mean[0],-_mean[1],-_mean[2], dtype=torch.float32)
+        tr_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32)
+
+        
+        quat_gt = torch.tensor([torch.rand(1),0,1,0])
+        quat_gt = normalize(quat_gt, p=1.0, dim = 0)
+        rr = Rotate(quaternion_to_matrix(quat_gt), dtype=torch.float32)
+        t = Transform3d().compose(tr).compose(rr).compose(tr_r)
+        pc = t.transform_points(pc)#.to(torch.float).to(device)
+        
+        return pc.cpu().numpy(), quat_gt.cpu().numpy()
+
+
     
     def _rotate_whole_part(self, pc):
         """
@@ -136,12 +202,25 @@ class GeometryLatentDataset(Dataset):
         """
         P, N, _ = pc.shape
         pc = pc.reshape(-1, 3)
-        rot_mat = R.random().as_matrix()
-        pc = (rot_mat @ pc.T).T
-        quat_gt = R.from_matrix(rot_mat.T).as_quat()
-        # we use scalar-first quaternion
-        quat_gt = quat_gt[[3, 0, 1, 2]]
-        return pc.reshape(P, N, 3), quat_gt
+        #pc, guat_gt = _rotate_pc(pc)
+        
+
+        pc = torch.from_numpy(pc).float()
+
+        _mean = torch.mean(pc, axis=0)
+        tr = Translate(-_mean[0],-_mean[1],-_mean[2], dtype=torch.float32)
+        tr_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32)
+
+        
+        quat_gt = torch.tensor([torch.rand(1),0,1,0])
+        quat_gt = normalize(quat_gt, p=1.0, dim = 0)
+        rr = Rotate(quaternion_to_matrix(quat_gt), dtype=torch.float32)
+        t = Transform3d().compose(tr).compose(rr).compose(tr_r)
+        pc = t.transform_points(pc)#.to(torch.float).to(device)
+
+        
+        return pc.cpu().numpy().reshape(P, N, 3), quat_gt.cpu().numpy()
+
     
     def _recenter_ref(self, pc, ref_part):
         """
@@ -163,7 +242,6 @@ class GeometryLatentDataset(Dataset):
     
 
     def __getitem__(self, idx):
-        
         data_dict = copy.deepcopy(self.data_list[idx])
         num_parts = data_dict['num_parts']
         part_pcs_gt = data_dict['part_pcs_gt']
@@ -179,7 +257,7 @@ class GeometryLatentDataset(Dataset):
             pc = part_pcs_final[i]
             pc, gt_trans = self._recenter_pc(pc)
             pc, gt_quat = self._rotate_pc(pc)
-            
+            #print(i,gt_quat )
             cur_quat.append(gt_quat)
             cur_trans.append(gt_trans)
             cur_pts.append(pc)
@@ -266,8 +344,18 @@ class GeometryLatentDataset(Dataset):
         noise_rots = torch.randn(part_rots_ref.shape)
         timesteps = torch.randint(0, 50, (1,)).long()
         
+        noise_rots[...,1] = torch.repeat_interleave(torch.Tensor([0]), noise_rots.shape[-2], dim=0).unsqueeze(dim=0)
+        noise_rots[...,2] = torch.repeat_interleave(torch.Tensor([1]), noise_rots.shape[-2], dim=0).unsqueeze(dim=0)
+        noise_rots[...,3] = torch.repeat_interleave(torch.Tensor([0]), noise_rots.shape[-2], dim=0).unsqueeze(dim=0)
+
+
         part_trans_ref = self.noise_scheduler.add_noise(torch.tensor(part_trans_ref), noise_trans, timesteps).numpy()
         part_rots_ref = self.noise_scheduler.add_noise(torch.tensor(part_rots_ref), noise_rots, timesteps).numpy()
+
+
+        part_rots_ref[...,1] = torch.repeat_interleave(torch.Tensor([0]), part_rots_ref.shape[-2], dim=0).unsqueeze(dim=0)
+        part_rots_ref[...,2] = torch.repeat_interleave(torch.Tensor([1]), part_rots_ref.shape[-2], dim=0).unsqueeze(dim=0)
+        part_rots_ref[...,3] = torch.repeat_interleave(torch.Tensor([0]), part_rots_ref.shape[-2], dim=0).unsqueeze(dim=0)
 
         data_dict['part_trans'][sample_ref_parts] = part_trans_ref
         data_dict['part_rots'][sample_ref_parts] = part_rots_ref
@@ -291,7 +379,7 @@ def build_geometry_dataloader(cfg):
         shuffle=True,
         num_workers=cfg.data.num_workers,
         pin_memory=True,
-        drop_last=True,
+        drop_last=False,
         persistent_workers=(cfg.data.num_workers > 0),
     )
 

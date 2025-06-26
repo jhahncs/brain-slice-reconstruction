@@ -9,6 +9,23 @@ from IPython.core.pylabtools import figsize
 from plyfile import PlyData, PlyElement
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
 def plot_pointcloud(
     vertices,
     alpha=.5,

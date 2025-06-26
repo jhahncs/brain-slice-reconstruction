@@ -83,6 +83,9 @@ class Denoiser(pl.LightningModule):
         gt_trans_and_rots = torch.cat([gt_trans, gt_rots], dim=-1)
         ref_part = data_dict["ref_part"]
         noise = torch.randn(gt_trans_and_rots.shape, device=self.device)
+        noise[...,4] = torch.repeat_interleave(torch.Tensor([1]), noise.shape[-2], dim=0).unsqueeze(dim=0)
+        noise[...,5] = torch.repeat_interleave(torch.Tensor([0]), noise.shape[-2], dim=0).unsqueeze(dim=0)
+        noise[...,6] = torch.repeat_interleave(torch.Tensor([0]), noise.shape[-2], dim=0).unsqueeze(dim=0)
 
         B, P, N, C = data_dict["part_pcs"].shape
 
@@ -91,7 +94,12 @@ class Denoiser(pl.LightningModule):
         
         noisy_trans_and_rots = self.noise_scheduler.add_noise(gt_trans_and_rots, noise, timesteps)
 
+
         noisy_trans_and_rots[ref_part] = gt_trans_and_rots[ref_part]
+        noisy_trans_and_rots[...,4] = torch.repeat_interleave(torch.Tensor([1]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+        noisy_trans_and_rots[...,5] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+        noisy_trans_and_rots[...,6] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+
 
         part_pcs = data_dict["part_pcs"]
         part_valids = data_dict["part_valids"]
@@ -106,6 +114,10 @@ class Denoiser(pl.LightningModule):
             data_dict['part_scale'],
             ref_part
         )
+        pred_noise[...,4] = torch.repeat_interleave(torch.Tensor([1]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)
+        pred_noise[...,5] = torch.repeat_interleave(torch.Tensor([0]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)
+        pred_noise[...,6] = torch.repeat_interleave(torch.Tensor([0]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)
+        #pred_noise[ref_part]  = gt_trans_and_rots[ref_part]
 
         output_dict = {
             'pred_noise': pred_noise,
@@ -164,6 +176,15 @@ class Denoiser(pl.LightningModule):
 
         noisy_trans_and_rots[ref_part] = reference_gt_and_rots[ref_part]
 
+
+        reference_gt_and_rots[...,4] = torch.repeat_interleave(torch.Tensor([1]), reference_gt_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+        reference_gt_and_rots[...,5] = torch.repeat_interleave(torch.Tensor([0]), reference_gt_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+        reference_gt_and_rots[...,6] = torch.repeat_interleave(torch.Tensor([0]), reference_gt_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+        noisy_trans_and_rots[...,4] = torch.repeat_interleave(torch.Tensor([1]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+        noisy_trans_and_rots[...,5] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+        noisy_trans_and_rots[...,6] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+
+
         part_valids = data_dict['part_valids'].clone()
         part_scale = data_dict["part_scale"].clone()
         part_pcs = data_dict["part_pcs"].clone()
@@ -181,9 +202,15 @@ class Denoiser(pl.LightningModule):
                 part_scale,
                 ref_part
             )
+            pred_noise[...,4] = torch.repeat_interleave(torch.Tensor([1]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)
+            pred_noise[...,5] = torch.repeat_interleave(torch.Tensor([0]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)
+            pred_noise[...,6] = torch.repeat_interleave(torch.Tensor([0]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)
+
             noisy_trans_and_rots = self.noise_scheduler.step(pred_noise, t, noisy_trans_and_rots).prev_sample
             noisy_trans_and_rots[ref_part] = reference_gt_and_rots[ref_part]  
-
+            noisy_trans_and_rots[...,4] = torch.repeat_interleave(torch.Tensor([1]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+            noisy_trans_and_rots[...,5] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+            noisy_trans_and_rots[...,6] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
 
         pts = data_dict['part_pcs']
         pred_trans = noisy_trans_and_rots[..., :3]

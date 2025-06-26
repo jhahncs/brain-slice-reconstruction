@@ -6,6 +6,8 @@ import random
 import multiprocessing
 from vedo import dataurl, printc, Plotter, Points, Mesh, Text2D
 import torch
+import shutil
+import slice_util
 
 def pcd_2_mesh(pdc_filename, mesh_filename):
     mesh = Mesh(pdc_filename)
@@ -27,55 +29,21 @@ def padding_to_image(image, padding_size=100):
 
     return _image.astype(np.float32)
 
-
-def random_rotation(points):
-    """Rotate point cloud by random angle around a random axis"""
-    axis = np.random.randn(3)
-    axis = axis/np.linalg.norm(axis)
-    angle = np.random.uniform(0, 2*np.pi)
-    cos_a = np.cos(angle)
-    sin_a = np.sin(angle)
-    rotation_matrix = np.array([
-        [cos_a + (1-cos_a)*axis[0]**2, (1-cos_a)*axis[0]*axis[1] - sin_a*axis[2], (1-cos_a)*axis[0]*axis[2] + sin_a*axis[1]],
-        [(1-cos_a)*axis[0]*axis[1] + sin_a*axis[2], cos_a + (1-cos_a)*axis[1]**2, (1-cos_a)*axis[1]*axis[2] - sin_a*axis[0]],
-        [(1-cos_a)*axis[0]*axis[2] - sin_a*axis[1], (1-cos_a)*axis[1]*axis[2] + sin_a*axis[0], cos_a + (1-cos_a)*axis[2]**2]
-    ])
-    rotated_points = np.dot(points, rotation_matrix)
-    return torch.from_numpy(rotated_points).float()
-def random_translation(points, max_translation=0.1):
-    """Translate point cloud by random vector"""
-    translation_vector = np.random.uniform(-max_translation, max_translation, size=3)
-    translated_points = points + translation_vector
-    if isinstance(translated_points, torch.Tensor):
-        return translated_points.to(torch.float)        
-    else:
-        return torch.from_numpy(translated_points).float()
-        
-def random_scale(points, scale_min=0.8, scale_max=1.5):
-    """Scale point cloud by random factor"""
-    scale_factor = np.random.uniform(scale_min, scale_max)
-    
-    scaled_points = points * scale_factor
-    if isinstance(points, torch.Tensor):
-        return scaled_points.to(torch.float)        
-    else:
-        return torch.from_numpy(scaled_points).float()
-
-def tiff_2_pcd(slice_filename, output_dir, tickness):
+def tiff_2_pcd(offset_y, tiff_filename_full, output_dir, tickness, overwrite=True):
 
 
-    slice_filename_arr = slice_filename.split("/")
+    slice_filename_arr = tiff_filename_full.split("/")
     slice_filename_itself = slice_filename_arr[len(slice_filename_arr)-1].split(".")[0]
     obj_filename = f'{slice_filename_itself}.obj'
     pcd_filename = f'{output_dir}/{obj_filename}'
-    if os.path.exists(pcd_filename):
+    if not overwrite and os.path.exists(pcd_filename):
         return pcd_filename
 
     os.makedirs(output_dir, exist_ok = True)
     num_of_poinst_tickness = 10
     #row_index = int(index/10)
     #col_index = int(index%10)
-    image = cv2.imread(slice_filename, cv2.IMREAD_COLOR)
+    image = cv2.imread(tiff_filename_full, cv2.IMREAD_COLOR)
     #image = padding_to_image(image)
     #image = cv2.copyMakeBorder(image, 100, 100, 100, 100,cv2.BORDER_CONSTANT,value=[0,0,0])
     h, w, c = image.shape
@@ -98,8 +66,9 @@ def tiff_2_pcd(slice_filename, output_dir, tickness):
     hull_area_list.sort(key = lambda x :x[2], reverse=True)
     outer_points = hull_area_list[0][0].squeeze(axis=1)
 
-    _i = 0
-    y_min = _i * tickness
+    
+    y_min = offset_y
+    #print('y_min',y_min)
     y_max = y_min + tickness
     xyz_list = []
     for i, x in np.ndenumerate(canny_image):
@@ -110,9 +79,11 @@ def tiff_2_pcd(slice_filename, output_dir, tickness):
     for i in range(outer_points.shape[0]):
         min_value = (tickness/num_of_poinst_tickness)*1 + y_min
         max_value = (tickness/num_of_poinst_tickness)*num_of_poinst_tickness + y_min
+        min_value = y_min
+        max_value = tickness + y_min
 
         # 5개의 랜덤한 소수점 숫자 생성
-        random_numbers = [random.uniform(min_value, max_value) for _ in range(5)]
+        random_numbers = [random.uniform(min_value, max_value) for _ in range(100)]
         for y in random_numbers:
             xyz_list.append([(gray_image.shape[1]-outer_points[i][0])/(gray_image.shape[1]), y, (gray_image.shape[0]-outer_points[i][1])/(gray_image.shape[0])])
     
@@ -132,7 +103,7 @@ def tiff_2_pcd(slice_filename, output_dir, tickness):
     #    xyz[1] += dz
 
 
-
+    #print(f'{tiff_filename_full}_{np.min(xyz_list, axis=0)[1]}_{np.max(xyz_list, axis=0)[1]}_{y_min}_{y_max}')
 
     with open(pcd_filename,'w') as f:
         for xyz in xyz_list:
@@ -197,35 +168,63 @@ def main():
 
 
 
-def _tiff_2_obj():
-
+def tiff_2_obj_parallel(tiff_dir_root, data_ids, tickness, spacing, obj_dir_root):
+    offset_y_list = []
     tiff_filename_list = []
     obj_dir_root_list = []
     tickness_list = []
-    for data_id in data_ids:
+    obj_dir_list = []
 
-
-        tiff_dir = f'{tiff_dir_root}/{data_id}'
+    if data_ids is None:
+        tiff_dir = f'{tiff_dir_root}'
         image_filename_list = []
         for f in os.listdir(tiff_dir):
+            if os.path.isdir(f):
+                continue
             image_filename_list.append(tiff_dir+"/"+f)
         image_filename_list.sort(key = lambda x: int(x.split("/")[-1].split(".")[-2]))
 
-        obj_dir = f'{obj_dir_root}/{data_id}/fractured_0'
+        obj_dir = f'{obj_dir_root}/{tickness:.3f}_{spacing:.3f}/fractured_0'
         os.makedirs(obj_dir, exist_ok = True)
-        for orginal_filename in image_filename_list:
+        for _i, orginal_filename in enumerate(image_filename_list):
+            offset_y_list.append(_i*spacing)
             tiff_filename_list.append(orginal_filename)
             obj_dir_root_list.append(obj_dir)
             tickness_list.append(tickness)
+        obj_dir_list.append(f'{tickness:.3f}_{spacing:.3f}')
+    else:
+            
+        for data_id in data_ids:
 
-    print(f'the number of jobs:{len(tiff_filename_list)}')
+
+            tiff_dir = f'{tiff_dir_root}/{data_id}'
+            image_filename_list = []
+            for f in os.listdir(tiff_dir):
+                if os.path.isdir(f):
+                    continue
+                image_filename_list.append(tiff_dir+"/"+f)
+            image_filename_list.sort(key = lambda x: int(x.split("/")[-1].split(".")[-2]))
+
+            obj_dir = f'{obj_dir_root}/{data_id}_{tickness:.3f}_{spacing:.3f}/fractured_0'
+            os.makedirs(obj_dir, exist_ok = True)
+            for _i, orginal_filename in enumerate(image_filename_list):
+                offset_y_list.append(_i*spacing)
+                tiff_filename_list.append(orginal_filename)
+                obj_dir_root_list.append(obj_dir)
+                tickness_list.append(tickness)
+            obj_dir_list.append(f'{data_id}_{tickness:.3f}_{spacing:.3f}/fractured_0')
+
+
+    print(f'_tiff_2_obj: the number of jobs:{len(tiff_filename_list)}')
     with multiprocessing.Pool() as pool: # Use a pool of 4 processes
-        pool.starmap(tiff_2_pcd, zip(tiff_filename_list, obj_dir_root_list, tickness_list))
+        pool.starmap(tiff_2_pcd, zip(offset_y_list,tiff_filename_list, obj_dir_root_list, tickness_list))
 
-def obj_slicing():
+    return obj_dir_list
+
+def distribute_obj_files(data_ids, tickness, spacing, obj_dir_root, from_index, to_index, num_of_slices):
     for data_id in data_ids:
         for start_index in range(int((to_index-from_index)/num_of_slices)):
-            obj_dir = f'{obj_dir_root}/{data_id}/fractured_0'
+            obj_dir = f'{obj_dir_root}/{data_id}_{tickness:.3f}_{spacing:.3f}/fractured_0'
 
             obj_filename_list = []
             for f in os.listdir(obj_dir):
@@ -237,9 +236,8 @@ def obj_slicing():
 
             start_data_id = obj_filename_list_sub[0].split("/")[-1].split(".")[-2]
             #end_data_id = obj_filename_list_sub[-1].split("/")[-1].split(".")[-2]
-            obj_slicing_dir = f'{obj_dir_root}/{data_id}_{start_data_id}_{to_index}/fractured_0'
+            obj_slicing_dir = f'{obj_dir_root}/{data_id}_{tickness:.3f}_{spacing:.3f}_{start_data_id}_{to_index}/fractured_0'
             os.makedirs(obj_slicing_dir, exist_ok = True)
-            print(obj_slicing_dir)
             obj_file_list = []
             for orginal_filename in obj_filename_list_sub:
                 filename = orginal_filename.split("/")[-1]
@@ -262,19 +260,21 @@ def load_obj(file_path):
     return np.array(vertices)
 
 
-def obj_augmentation( obj_dir_root, data_id,  from_index, start_index, to_index, group_index):
+def obj_augmentation(data_name, data_count, tickness, spacing,obj_dir_root, data_id,  from_index, start_index, to_index):
 
-    obj_slicing_dir = f'{obj_dir_root}/{data_id}_{start_index}_{to_index}/fractured_0'
+    obj_slicing_dir = f'{obj_dir_root}/{data_id}_{tickness:.3f}_{spacing:.3f}_{start_index}_{to_index}/fractured_0'
     obj_filename_list = []
     for f in os.listdir(obj_slicing_dir):
         obj_filename_list.append(obj_slicing_dir+"/"+f)
         
 
-    for aug_name, aug_func in [('random_rotation',random_rotation),('random_translation',random_translation),('random_scale',random_scale),('all',all)]:
-        
+    #for aug_name, aug_func in [('random_rotation',random_rotation),('random_translation',random_translation),('random_scale',random_scale),('all',all)]:
 
-        obj_dir = f'{obj_dir_root}/{data_id}_{start_index}_{to_index}_{aug_name}/fractured_{group_index}'
-        print(obj_dir)
+    for data_group_id in range(data_count):
+            
+        angle = random.random()
+        aug_name = 'rotate'
+        obj_dir = f'{obj_dir_root}/{data_id}_{tickness:.3f}_{spacing:.3f}_{start_index}_{to_index}_{aug_name}_{data_name}/fractured_{data_group_id}'
         os.makedirs(obj_dir, exist_ok = True)
 
         for obj_filename in obj_filename_list:
@@ -282,18 +282,13 @@ def obj_augmentation( obj_dir_root, data_id,  from_index, start_index, to_index,
             target_filename = f'{obj_dir}/{filename}'
             #vertices = pytorch3d.io.load_obj(obj_filename, device='cpu')[0]
             vertices = load_obj(obj_filename)
-            if aug_name =='all':
-                augmented_image = random_rotation(vertices)
-                augmented_image = random_translation(augmented_image)
-                augmented_image = random_scale(augmented_image)    
-            else:
-                augmented_image = aug_func(vertices)
+            augmented_image, _  = slice_util.random_rotation(vertices, angle)
             
             with open(target_filename,'w') as f:
                 for xyz in augmented_image:
                     f.write(f'v {xyz[0]} {xyz[1]} {xyz[2]}\n')
 
-                    
+                        
             
 
 
@@ -314,52 +309,61 @@ if __name__ == "__main__":
     start_index=0
     to_index=215
     num_of_slices=20
-    tickness = 0.02
-
-    #_tiff_2_obj()
-    #obj_slicing()
+    tickness_list_const = [0.001, 0.003, 0.005]
     
+    spacing = 0.007
+    
+    for tickness in tickness_list_const:
+        print(tickness)
+        tiff_2_obj_parallel(tiff_dir_root, data_ids, tickness,spacing,obj_dir_root)
+        distribute_obj_files(data_ids, tickness, spacing, obj_dir_root, from_index, to_index, num_of_slices)
 
-            
+
+    tickness_list = []
     obj_dir_root_list = []
     data_id_list = []
     from_index_list = []
     start_index_list = []
     to_index_list = []
-    group_index_list = []
+
+    data_name_list = []
+    data_count_list = []
 
     for data_id in data_ids:
+        for tickness in tickness_list_const:
+            obj_dir = f'{obj_dir_root}/{data_id}_{tickness:.3f}_{spacing:.3f}/fractured_0'
+            obj_filename_list = []
+            for f in os.listdir(obj_dir):
+                obj_filename_list.append(obj_dir+"/"+f)
+            obj_filename_list.sort(key = lambda x: int(x.split("/")[-1].split(".")[-2]))
 
-        obj_dir = f'{obj_dir_root}/{data_id}/fractured_0'
-        obj_filename_list = []
-        for f in os.listdir(obj_dir):
-            obj_filename_list.append(obj_dir+"/"+f)
-        obj_filename_list.sort(key = lambda x: int(x.split("/")[-1].split(".")[-2]))
+            for data_name, data_count in [('train',20), ('val',2), ('test',1) ]:
+                    
 
 
-        for group_index in range(10):
+                for start_index in range(int((to_index-from_index)/num_of_slices)):
 
+                            
+                    obj_filename_list_sub = obj_filename_list[from_index + start_index : to_index : int((to_index - from_index) / num_of_slices) + 1]
 
-            for start_index in range(int((to_index-from_index)/num_of_slices)):
+                    start_data_id = obj_filename_list_sub[0].split("/")[-1].split(".")[-2]
 
-                        
-                obj_filename_list_sub = obj_filename_list[from_index + start_index : to_index : int((to_index - from_index) / num_of_slices) + 1]
+                    data_name_list.append(data_name)
+                    data_count_list.append(data_count)
+                    
+                    tickness_list.append(tickness)
+                    obj_dir_root_list.append(obj_dir_root)
+                    data_id_list.append(data_id)
+                    from_index_list.append(from_index)
+                    start_index_list.append(start_data_id)
+                    to_index_list.append(to_index)
 
-                start_data_id = obj_filename_list_sub[0].split("/")[-1].split(".")[-2]
-
-                obj_dir_root_list.append(obj_dir_root)
-                data_id_list.append(data_id)
-                from_index_list.append(from_index)
-                start_index_list.append(start_data_id)
-                to_index_list.append(to_index)
-                group_index_list.append(group_index)
-
-                #if True:
+                    #if True:
                 #    break
 
-                
-        #obj_augmentation(obj_dir_root, '0408', '0088', '0089','215','0')
-        print(f'the number of jobs:{len(group_index_list)}')
-        with multiprocessing.Pool() as pool: # Use a pool of 4 processes
-            pool.starmap(obj_augmentation, zip( obj_dir_root_list, data_id_list, from_index_list, start_index_list, to_index_list,group_index_list))
+                    
+            #obj_augmentation(obj_dir_root, '0408', '0088', '0089','215','0')
+    print(f'obj_augmentation: the number of jobs:{len(to_index_list)}')
+    with multiprocessing.Pool() as pool: # Use a pool of 4 processes
+        pool.starmap(obj_augmentation, zip(data_name_list,data_count_list,tickness_list, obj_dir_root_list, data_id_list, from_index_list, start_index_list, to_index_list))
 
