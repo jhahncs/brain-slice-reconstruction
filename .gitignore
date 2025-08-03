@@ -12,7 +12,8 @@ nohup.out
 !/puzzlefusion_plusplus/vqvae/data
 .vscode/
 chamferdist/
-
+web/static/
+web/flask_session/
 __pycache__
 
 # Byte-compiled / optimized / DLL files

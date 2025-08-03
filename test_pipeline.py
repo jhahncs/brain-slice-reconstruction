@@ -20,6 +20,9 @@ if torch.cuda.is_available():
 else:
     device = torch.device("cpu")
 
+#torch.nn.parallel.DistributedDataParallel.no_sync()
+#torch._dynamo.config.optimize_ddp = False
+
 
 import puzzlefusion_plusplus.vqvae.dataset.dataset
 importlib.reload(puzzlefusion_plusplus.vqvae.dataset.dataset)
@@ -71,11 +74,13 @@ def init_dir(files_root,data_ids):
     obj_dir_root = f'{test_root}/objs'
     pc_dir_root = f'{test_root}/pc'
     inference_dir_root = f'{test_root}/inference'
+    render_output_dir = test_root+'/render'
+
     os.makedirs(tiff_dir_root, exist_ok=True)
     os.makedirs(obj_dir_root, exist_ok=True)
-    render_output_dir = test_root+'/render'
     os.makedirs(pc_dir_root, exist_ok=True)
-    tickness = 0.001
+    os.makedirs(render_output_dir, exist_ok=True)
+
     return tiff_dir_root, obj_dir_root, pc_dir_root, inference_dir_root, render_output_dir
 
 
@@ -165,7 +170,7 @@ def tiff_2_obj(cfg, tiff_dir_root, tickness, spacing, obj_dir_root, pc_dir_root)
     return obj_dir_list_relative
 
 
-def inference(cfg, pc_dir_root, obj_dir_list_relative, ckpt_path, inference_dir_root):       
+def inference(cfg, project_root, pc_dir_root, obj_dir_list_relative, ckpt_path, inference_dir_root):       
     
 
     with open_dict(cfg):
@@ -173,12 +178,13 @@ def inference(cfg, pc_dir_root, obj_dir_list_relative, ckpt_path, inference_dir_
         cfg.denoiser.data.data_val_dir = pc_dir_root + "/"+obj_dir_list_relative[0]
         #cfg.denoiser.ckpt_path= data_home_dir+f'output/denoiser/everyday_epoch100_bs64/training/last.ckpt'
         cfg.denoiser.ckpt_path= ckpt_path
-        cfg.inference_dir= inference_dir_root
+        cfg.inference_dir= ""
         cfg.denoiser.data.val_batch_size=1
         cfg.verifier.max_iters = 1
+        cfg.experiment_output_path = project_root
         #cfg.verifier.ckpt_path= '/disk2/data/breaking-bad-dataset/output/verifier/everyday_epoch100_bs64/training/last.ckpt'
 
-
+    print(cfg)
 
     denoiser_only_flag = cfg.verifier.max_iters == 1
 
@@ -209,7 +215,7 @@ def inference(cfg, pc_dir_root, obj_dir_list_relative, ckpt_path, inference_dir_
         model.verifier.load_state_dict({k.replace('verifier.', ''): v for k, v in verifier_weights.items()})
 
     # initialize trainer
-    trainer = pl.Trainer(accelerator=cfg.accelerator, max_epochs=1, logger=False)
+    trainer = pl.Trainer(accelerator=cfg.accelerator, devices=1, max_epochs=1, logger=False)
 
     # start inference
     trainer.test(model=model, dataloaders=test_loader)

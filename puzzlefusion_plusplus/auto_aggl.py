@@ -414,6 +414,7 @@ class AutoAgglomerative(pl.LightningModule):
 
 
     def _save_inference_data(self, data_dict, pred_trans_rots, acc):
+        
         T, B, _, _ = pred_trans_rots.shape
 
         for i in range(B):
@@ -423,7 +424,7 @@ class AutoAgglomerative(pl.LightningModule):
                 self.cfg.inference_dir, 
                 str(data_dict['data_id'][i].item())
             )
-
+            print("_save_inference_data",save_dir)
             os.makedirs(save_dir, exist_ok=True)
             c_trans_rots = pred_trans_rots[:, i, ...]
             mask = data_dict["part_valids"][i] == 1

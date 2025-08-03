@@ -20,19 +20,17 @@ import sys
 from datetime import timedelta
 import shutil
 # caution: path[0] is reserved for script path (or '' in REPL)
-sys.path.insert(1, '../cfos')
-import zipfile
+sys.path.insert(1, '..')
+sys.path.insert(1, '../2d_2_pcd')
+from zipfile import ZipFile
 import glob
-UPLOAD_FOLDER = 'files'
-DATA_FOLDER = 'projects'
+
+UPLOAD_FOLDER = 'static/files_temp'
+TRAINED_MODEL_FOLDER = 'static/trained_models'
 
 app = Flask(__name__)
 CORS(app)
 
-from  cfos_util import Cfos, Cfos_params, sanitize_folder_name
-
-from cfos_stat import cal_fold, cal_pvalue, cal_fdr
-from cfos_brainheatmap import build_dict, gen_brain_heatmap
 
 #server_session.config["SESSION_PERMANENT"] = False     # Sessions expire when the browser is closed
 #server_session.config["SESSION_TYPE"] = "filesystem"     # Store session data in files
@@ -60,14 +58,34 @@ import shutil
 
 #sema = threading.Semaphore(1)
 
-if not os.path.exists(UPLOAD_FOLDER):
-    os.mkdir(UPLOAD_FOLDER)
-if not os.path.exists(DATA_FOLDER):
-    os.mkdir(DATA_FOLDER)
 
-ALLOWED_EXTENSIONS = set(['xlsx'])
+os.makedirs(UPLOAD_FOLDER,exist_ok=True)
+os.makedirs(TRAINED_MODEL_FOLDER,exist_ok=True)
 
+ALLOWED_EXTENSIONS = set(['zip'])
 
+fiberColors = [
+  'red',
+  'green',
+  'blue',
+  'yellow',
+  'cyan',
+  'magenta',
+  'orange',
+  'lime',
+  'pink',
+  'purple',
+  'hotpink',
+  'deepskyblue',
+  'aqua',
+  'teal',
+  'gold',
+  'salmon',
+  'tomato',
+  'skyblue',
+  'indigo',
+  'white'
+]
 
 
 def allowed_file(filename): # filename을 보고 지원하는 media type인지 판별
@@ -100,21 +118,17 @@ def newdata():
         
     
         
-                
-        output_dir = DATA_FOLDER+"/"+request.form.get('newDataName')
-
-        print(output_dir)
-        cfos = Cfos(filename = filepath, output_dir = output_dir, load_from_files = False)
-        ValidationReport = cfos.validation_report()
-        msg =''
-        if ValidationReport['TG number consistent check'] == 'Valid':
-            msg = 'Successfully uploaded'
-        else:
-            msg = 'invalid format!'
         
+        output_dir = UPLOAD_FOLDER+"/"+request.form.get('newDataName')+"/tiff"
+        print(output_dir)
+        os.makedirs(output_dir, exist_ok=True)
+        with ZipFile(filepath, 'r') as zip_obj:
+            zip_obj.extractall(output_dir)
+        
+        
+        msg = 'ok'
         response = {
             'message': msg,
-            'ValidationReport':ValidationReport
         }
         #sema.release() # 세마포어 릴리즈
         return jsonify(response)
@@ -131,31 +145,28 @@ def newdata():
 def load():
     print('load')
     if request.method == 'POST':
-        
+        traind_models = []
+        for f in os.listdir(TRAINED_MODEL_FOLDER):
+            traind_models.append(f)
+        print('traind_models',traind_models)
+        output_dir = UPLOAD_FOLDER+"/"+request.form.get('dataname')+"/tiff"
 
-        output_dir = DATA_FOLDER+"/"+request.form.get('dataname')
-
-        cfos = Cfos(filename = None,output_dir = output_dir, load_from_files=True)
-        filename = f'{output_dir}/regions_with_zero_values.png'
-        if not os.path.exists(filename):
-            cfos.gen_zero_value_heatmap_color(filename)
-
-        img = Image.open(filename)
-        byte_arr = io.BytesIO()
-        img.save(byte_arr,  format='PNG')
-        encoded_image = base64.b64encode(byte_arr.getvalue()).decode('ascii')
-        group_name_dict = []
-        for g in cfos.group_names:
-            _ro = {}
-            _ro['label'] = g
-            _ro['value'] = g
-            group_name_dict.append(_ro)
+        tiff_imgs = []
+        tiff_filenames = []
+        for f in os.listdir(output_dir):
+            if f.endswith('.tif'):
+                tiff_filenames.append(request.form.get('dataname')+"/tiff/"+f)
+            '''
+            img = Image.open(output_dir+"/"+f)
+            byte_arr = io.BytesIO()
+            img.save(byte_arr,  format='PNG')
+            encoded_image = base64.b64encode(byte_arr.getvalue()).decode('ascii')
+            tiff_imgs.append(encoded_image)
+            '''
+            
         response = {
-            'message': cfos.preprocess_summary(),
-            'image':encoded_image,
-            'group_names':cfos.group_names,
-            'color_names':cfos.color_list_full,
-
+            'tiff_filenames':tiff_filenames,
+            'traind_models':traind_models
             
         }
         
@@ -165,7 +176,7 @@ def load():
 def removedata():
     print("removedata")
 
-    removed_data = DATA_FOLDER+"/"+request.form.get('dataname')
+    removed_data = UPLOAD_FOLDER+"/"+request.form.get('dataname')
 
     print(removed_data)
     #os.removedirs(removed_data)
@@ -181,8 +192,10 @@ def removedata():
 
 @app.route('/projects', methods=['GET','POST'])
 def projects():
-    print("projects")
-    _dirs = os.listdir('projects')
+    print("projects",UPLOAD_FOLDER)
+    _dirs = os.listdir(UPLOAD_FOLDER)
+    _dirs = [f for f in _dirs if os.path.isdir(UPLOAD_FOLDER+"/"+f) == True]
+
     print(_dirs)
     response = {
         'dirs': _dirs,
@@ -192,27 +205,7 @@ def projects():
 
 
 
-def load_object(params: Cfos_params):
 
-    cfos = Cfos(None, DATA_FOLDER+"/"+params.dataname, load_from_files=True)
-    cfos.build_group1_and_group2(params.group1_name, params.group2_name, load_from_files = True)
-    stat_name = params.stat_test_name()
-    filename_fold= f'{DATA_FOLDER}/{params.dataname}/{stat_name}/fold.csv'
-
-    df_fold = cal_fold(cfos, cfos.df_by_two_group_and_color, params.group1_name, params.group2_name, filename_fold)
-    
-    filename_pairwiseCompare= f'{DATA_FOLDER}/{params.dataname}/{stat_name}/pairwise_{params.pairwiseCompareMethod}.csv'
-
-    df_pairwise_test = cal_pvalue(cfos,cfos.df_by_two_group_and_color, params.pairwiseCompareMethod,filename_pairwiseCompare, sigle_core_mode = False, test_mode = False)
-
-    df_multiple_correction = None
-    if params.multipleCompareCorrectionMethod != 'None':
-        filename_multiplecorrection = f'{DATA_FOLDER}/{params.dataname}/{stat_name}/multiplecorrection_{params.multipleCompareCorrectionMethod}.csv'
-        df_multiple_correction = cal_fdr(cfos, df_pairwise_test, _alpha = params.fdr_alpha, result_filename=filename_multiplecorrection)
-
-        return cfos, df_fold, df_multiple_correction
-    else:
-        return cfos, df_fold, df_pairwise_test
 #df_sig_region_fold = None
 @app.route('/downloadall', methods=['POST'])
 def downloadall():
@@ -291,169 +284,157 @@ def downloadall():
 
         #return send_from_directory(uploads_dir, secure_filename, as_attachment=True)
     
-@app.route('/fold', methods=['POST'])
+def load_params(params):
+    tickness =  float(params.form.get('tickness'))
+    projectname = params.form.get('projectname')
+    spacing =  float(params.form.get('spacing'))
+    traindModel =  params.form.get('trainedModel')
+    return projectname, tickness, spacing, traindModel
+
+config_dir = '/home/jhahn/puzzlefusion-plusplus/config'
+
+import test_pipeline
+import render_inference_result
+@app.route('/reconstruct', methods=['POST'])
 def fold():
     #sema.acquire() # 세마포어 획득
 
-    print('fold')
-    params = Cfos_params(request)
+    print('reconstruct')
+    projectname, tickness, spacing, traindModel = load_params(request)
+    print(projectname, tickness, spacing, traindModel)
+    
+    data_ids = [projectname]
+    ckpt_path= TRAINED_MODEL_FOLDER+"/"+ traindModel
 
 
-    print(params)
-    _filename_from_params = params.stat_test_name()
-    temp_dir = DATA_FOLDER+"/"+params.dataname+"/"+_filename_from_params
-    _filename_sig_regions = f'{temp_dir}/heatmap_significant_regions_{_filename_from_params}.csv'
-    print(_filename_sig_regions)
-    if not os.path.exists(_filename_sig_regions):
 
-        os.makedirs(temp_dir, exist_ok=True)
-        sta = time.time() # 시간 측정
-        cfos, df_fold, df_stat_test = load_object(params)
-        eta = time.time() # 시간 측정
-        print('loading:',int(eta-sta)," sec")
-        print(df_fold.index)
+    cfg = test_pipeline.load_cfg(config_dir)
+    tiff_dir_root, obj_dir_root, pc_dir_root, inference_dir_root, render_output_dir = test_pipeline.init_dir(UPLOAD_FOLDER,data_ids)
+    files_root =  UPLOAD_FOLDER+"/"+projectname
+    print('tiff_dir_root:',tiff_dir_root)
+    print('obj_dir_root:',obj_dir_root)
+    print('pc_dir_root:',pc_dir_root)
+    print('inference_dir_root:',inference_dir_root)
+    print('render_output_dir:',render_output_dir)
 
-        sta = time.time() # 시간 측정
-        color_2_dict_up, color_2_dict_down, df_sig_region_fold= build_dict(cfos, df_fold, df_stat_test, params)
 
-        df_sig_region_fold.to_csv(_filename_sig_regions,index=None)
-        eta = time.time() # 시간 측정
-        print('build_dict:',int(eta-sta)," sec")
+    sta = time.time() # 시간 측정
+    obj_dir_list_relative = test_pipeline.tiff_2_obj(cfg, tiff_dir_root, tickness,spacing, obj_dir_root, pc_dir_root)
+    eta = time.time() # 시간 측정
+    time_tiff_2_obj = int(eta-sta) 
+    print('tiff_2_obj:',time_tiff_2_obj," sec")
 
-        #color_list = color_list[:1]
-        
-        with open(f'{temp_dir}/color_2_dict_up_{_filename_from_params}.json', 'w') as f:
-            json.dump(color_2_dict_up, f)
-        with open(f'{temp_dir}/color_2_dict_down_{_filename_from_params}.json', 'w') as f:
-            json.dump(color_2_dict_down, f)
-        
-   
+    #obj_dir_list_relative = ['0.001_0.007']
+    #obj_dir_list_relative
+    obj_dir_root = f'{files_root}/objs'
+    obj_files = []
+    for _o in os.listdir(obj_dir_root+"/"+obj_dir_list_relative[0]+"/fractured_0"):
+        obj_files.append(projectname+"/objs/"+obj_dir_list_relative[0]+"/fractured_0/"+_o)
+    #slice_util.combine_obj_files(obj_files, obj_dir_root+"/"+obj_dir_list_relative[0]+"/combined.obj")
+
+
+
+
+    sta = time.time() # 시간 측정
+    test_pipeline.inference(cfg, files_root, pc_dir_root, obj_dir_list_relative, ckpt_path, inference_dir_root)
+    eta = time.time() # 시간 측정
+    time_inference = int(eta-sta) 
+    print('inference:',time_inference," sec")
+
+    sta = time.time() # 시간 측정
+    vertices_gt = render_inference_result.get_vertices(inference_dir_root, obj_dir_root, device=test_pipeline.device)
+    test_pipeline.render(inference_dir_root, vertices_gt, render_output_dir)
+    eta = time.time() # 시간 측정
+    time_render = int(eta-sta) 
+    print('render:',time_render," sec")
+
+    sta = time.time() # 시간 측정
     
 
-    filename_df_regions_zero = f'{DATA_FOLDER}/{params.dataname}/df_{params.group1_name}_{params.group2_name}_zero_regions.csv'
-    try:
-        df_zero_regions = pd.read_csv(filename_df_regions_zero)
-    except:
-        df_zero_regions = []
-        pass
-    with open(f'{temp_dir}/color_2_dict_up_{_filename_from_params}.json', 'r') as f:
-        color_2_dict_up = json.load(f)
-    with open(f'{temp_dir}/color_2_dict_down_{_filename_from_params}.json', 'r') as f:
-        color_2_dict_down = json.load(f)
+    shape_cd = [0.3725, 0.3275, 0.3040, 0.2622, 0.2249, 0.1924, 0.1631, 0.1410, 0.1116,
+        0.0861, 0.0712, 0.0544, 0.0421, 0.0277, 0.0198, 0.0124, 0.0061, 0.0033]
+    shape_cd = test_pipeline.eval( vertices_gt,inference_dir_root,render_output_dir)    
+
+    obj_trans_dir_root = f'{files_root}/render/0/trans'
+    obj_pred_files = []
+    for _o in os.listdir(obj_trans_dir_root):
+        obj_pred_files.append(projectname+"/trans/"+_o)
 
 
+    obj_init_gt_files = []
+    for _o in os.listdir(f'{files_root}/render/0/init_gt'):
+        obj_init_gt_files.append(projectname+"/init_gt/"+_o)
 
-    color_2_updown = {}
-    for k in color_2_dict_up:
-        color_2_updown[k] = {}
-        color_2_updown[k]['up'] = len(color_2_dict_up[k])
-        color_2_updown[k]['down'] = len(color_2_dict_down[k])
-    
+    eta = time.time() # 시간 측정
+    time_eval= int(eta-sta) 
+    print('eval:',time_eval," sec")
 
+    render_output_dir= files_root+'/render'
+    df_original_pos = pd.read_csv(render_output_dir+"/0/BoundingBoxOfInputParts.csv")
+    df_trasformation = pd.read_csv(render_output_dir+"/0/Transformation.csv")
+    df_original_pos.set_index('part_index', inplace=True)
+    df_trasformation.set_index('part_index', inplace=True)
+
+    df_total = pd.concat([df_original_pos,df_trasformation],axis=1)
+    df_total.reset_index(inplace=True)
+    df_total['chamfer_dist'] = shape_cd.cpu().numpy()
+    df_total['color'] = fiberColors[:len(df_total)]
+    postProcessSummary = {
+        'time_tiff_2_obj': f'{time_tiff_2_obj} sec.',
+        'time_inference':f'{time_inference} sec.',
+        'time_render':f'{time_render} sec.',
+        'time_eval':f'{time_eval} sec.',
+    }
     response = {
         #'df':df_sig_region_fold.to_dict(orient='records'),
-        'freq':color_2_updown,
-        'region_ids_with_all_zero': len(df_zero_regions)
+        'time_tiff_2_obj':time_tiff_2_obj,
+        'time_inference': time_inference,
+        'time_render':time_render,
+        'obj_files':obj_files,
+        'obj_init_gt_files':obj_init_gt_files,
+        'obj_pred_files':obj_pred_files,
+        'postProcessSummary': postProcessSummary,
+        'df_total':df_total.to_dict(orient='records'),
         #'elapsed_time': eta - sta
     }
     return jsonify(response)
 
 
-    
-@app.route('/brainheatmap', methods=['POST'])
-def brainheatmap():
-    #sema.acquire() # 세마포어 획득
 
-    print('brainheatmap')
+from PIL import Image, ImageSequence
+@app.route('/<projectname>/objs/<exp>/fractured_0/<filename>')
+def serve_obj(projectname,exp,filename):
+    return send_from_directory(f'{UPLOAD_FOLDER}/{projectname}/objs/{exp}/fractured_0', filename)
 
-    params = Cfos_params(request)
+@app.route('/<projectname>/<filetype>/<filename>')
+def serve_image(projectname,filetype,filename):
 
-    print(params)
-
-    _stat_test_name = params.stat_test_name()
-    temp_dir = DATA_FOLDER+"/"+params.dataname+"/"+_stat_test_name
-    _filename_sig_regions = f'{temp_dir}/heatmap_significant_regions_{_stat_test_name}.csv'
-
-    print(_filename_sig_regions)
-    #if not os.path.exists(temp_dir):
-    os.makedirs(temp_dir, exist_ok=True)
-    heatmap_files = glob.glob(temp_dir+"/heatmap*.png")
-
-
-    sta = time.time() # 시간 측정
-    #color_2_dict_up, color_2_dict_down, df_sig_region_fold= build_dict(cfos, df_fold, df_fdr_permutation_test, pvalue_th,fold_up,fold_down)
-    #df_sig_region_fold.to_csv(f'{temp_dir}/heatmap_significant_regions_{_filename_from_params}.csv',index=None)
-
-    
-    df_sig_region_fold = pd.read_csv(_filename_sig_regions)
-    with open(f'{temp_dir}/color_2_dict_up_{_stat_test_name}.json', 'r') as f:
-        color_2_dict_up = json.load(f)
-    with open(f'{temp_dir}/color_2_dict_down_{_stat_test_name}.json', 'r') as f:
-        color_2_dict_down = json.load(f)
-
-    eta = time.time() # 시간 측정
-    print('build_dict: ',int(eta-sta))
-
-    output_img_filename = f'{temp_dir}/heatmap_{params.heatpmap_vis_name()}_{sanitize_folder_name(params.color)}_{_stat_test_name}.png'
-    print(output_img_filename)
-    if not os.path.exists(output_img_filename):
-
-        sta = time.time() # 시간 측정
-        cfos, df_fold, df_stat_test = load_object(params)
-        eta = time.time() # 시간 측정
-        print('loading: ',int(eta-sta))
-
-
-    
-
-
-        #color_list = [color]
-        sta = time.time() # 시간 측정
-       
-        gen_brain_heatmap(cfos, temp_dir, df_stat_test, cfos.color_list_full, color_2_dict_up,color_2_dict_down, params, single_core_mode = False)
-
-        eta = time.time() # 시간 측정
-        print('gen_brain_heatmap: ',int(eta-sta))
-   
-
-
-
-
-    
-    #heatmap_{color_code.replace("/","_")}.png
-    df_sig_region_fold = df_sig_region_fold.query(f'color=="{params.color}"')
-
-    #print('beging')
-    #gen_brain_heatmap(DATA_FOLDER+"/"+output_dir, color_list, df_fdr_permutation_test, pvalue_th, fold_up, fold_down,color_2_dict_up,color_2_dict_down)
-    #print('end')
-    sta = time.time() # 시간 측정
-    
-    img = Image.open(output_img_filename)
-    byte_arr = io.BytesIO()
-    img.save(byte_arr,  format='PNG')
-    encoded_image = base64.b64encode(byte_arr.getvalue()).decode('ascii')
-    
-    response = {
-        'message': f'{params.pvalue_th} {params.fold_up} {params.fold_down}',
-        'image': encoded_image,
+    if filetype == 'tiff':            
+        png_dir = f'{UPLOAD_FOLDER}/{projectname}/png'
+        os.makedirs(png_dir, exist_ok=True)
         
-        'df':df_sig_region_fold.to_dict(orient='records'),
-        #'elapsed_time': eta - sta
-    }
-    eta = time.time() # 시간 측정
-    print('image to byte: ',int(eta-sta))
-    return jsonify(response)
+        tiff_filename = f'{UPLOAD_FOLDER}/{projectname}/{filetype}/{filename}'
+        output_png_path = filename.replace('.tif','.png')
 
-@app.route("/download/<path:filename>")
-def download_test(filename):
-	#return send_file("files/test.text", mimetype="text/plain", as_attachment=True)
-    filepath = os.path.join('files', filename)
+        if not os.path.exists(f'{png_dir}/{output_png_path}'):
+            im = Image.open(tiff_filename)            
+            if hasattr(im, 'n_frames') and im.n_frames > 1:
+                for i, page in enumerate(ImageSequence.Iterator(im)):
+                    output_png_path = f"output_page_{i}.png"
+                    page.save(output_png_path)
+                    print(f"Saved {output_png_path}")
+            else:
+                # If it's a single-page TIFF, directly save as PNG
+                im.save(f'{png_dir}/{output_png_path}')
+                print(f"Saved {output_png_path}")
+            im.close()
 
-    # Check if the file exists
-    if os.path.isfile(filepath):
-        return send_from_directory('files', filename, as_attachment=True)
-    else:
-        return "File not found", 404
+        return send_from_directory(f'{png_dir}', output_png_path)
+    elif filetype == 'video':
+        return send_from_directory(f'{UPLOAD_FOLDER}/{projectname}/render/0/', filename)
+    elif filetype == 'trans' or filetype == 'init_gt':
+        return send_from_directory(f'{UPLOAD_FOLDER}/{projectname}/render/0/{filetype}', filename)
+    
 @app.route('/get_image', methods=['GET'])
 def get_image():
     
@@ -469,11 +450,5 @@ def get_image():
     except Exception as e:
         return jsonify({'error': str(e)})
 
-@app.route('/')
-def index():
-
-    
-    return render_template('index.html')
-    
 if __name__ == '__main__':
     app.run(host='localhost',threaded=True)

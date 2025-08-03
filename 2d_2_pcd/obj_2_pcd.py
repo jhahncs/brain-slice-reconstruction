@@ -303,11 +303,17 @@ def obj_augmentation(data_name, data_count, tickness, spacing,obj_dir_root, data
 if __name__ == "__main__":
 
     data_ids = ['0408']
+
     tiff_dir_root = '/data/jhahn/data/brain_lightsheet'
     obj_dir_root = '/data/jhahn/data/shape_dataset/data/brain_lightsheet'
-    from_index=88
+
+    data_ids = os.listdir(tiff_dir_root)
+    data_ids = [w for w in data_ids if os.path.isdir(tiff_dir_root+"/"+w) and w.startswith("mask_")]
+
+
+    from_index=100
     start_index=0
-    to_index=215
+    to_index=200
     num_of_slices=20
     tickness_list_const = [0.001, 0.003, 0.005]
     

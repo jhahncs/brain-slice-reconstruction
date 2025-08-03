@@ -37,6 +37,11 @@ NORMAL_VECTORS_TO_PROCESS = [
     [1, 1, 0],  # 45-degree slice in XY plane
     [1, 0, 1],  # 45-degree slice in XZ plane
     [0, 1, 1],  # 45-degree slice in YZ plane
+
+    [0.5, 0.5, 0],  # 45-degree slice in XY plane
+    [0.5, 0, 0.5],  # 45-degree slice in XZ plane
+    [0, 0.5, 0.5],  # 45-degree slice in YZ plane
+
     [1, 1, 1],  # Oblique slice through the main diagonal
 ]
 
@@ -98,6 +103,9 @@ if __name__ == "__main__":
     #original_volume = create_cube(64, 64, 64)  # Create a cube of size 64x64x64
 
     original_volume = imread('/data/jhahn/data/brain_lightsheet/mask_stack.tif')
+    print("original_volume",original_volume.shape)
+    print(np.max(np.max(original_volume[100,:,:],axis=1)))
+    print(np.min(np.min(original_volume[100,:,:],axis=1)))
     # --- 2. Create the main output directory ---
     if SAVE_OUTPUT_IMAGES:
         os.makedirs(OUTPUT_DIR, exist_ok=True)

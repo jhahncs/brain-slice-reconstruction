@@ -47,41 +47,54 @@ def remove_zero_slices(matrix):
 # Core Slicing Function
 # ====================================================================
 
-def slice_matrix(V, normal, tolerance=0.5):
+def slice_matrix(V, normal, tolerance=0.5, debug=False):
     """
     Reslices a 3D volume V along a plane defined by the normal vector.
     This function is a Python equivalent of MATLAB's obliqueslice.
     """
     # Normalize the normal vector
     normal = np.array(normal) / np.linalg.norm(normal)
-
+    if debug: print('normal',normal)
     # Volume dimensions and center
     original_shape = np.array(V.shape)
     array_center = original_shape / 2
-
+    if debug: print('original_shape',original_shape)
+    
     # Create an orthonormal basis for the slicing plane
     u = np.array([-normal[1], normal[0], 0])
+    
+
     if np.linalg.norm(u) < 1e-6:
         u = np.array([0, -normal[2], normal[1]])
+    
     u /= np.linalg.norm(u)
     v = np.cross(normal, u)
-
+    if debug: print('u', u)
+    if debug: print('v', v)
     # Determine the size of the new slice matrix
     max_dim = int(np.ceil(np.linalg.norm(original_shape)))
+    if debug: print('original_shape_norm', np.linalg.norm(original_shape))
+    if debug: print('max_dim', max_dim)
+
     slice_size = (max_dim, max_dim)
     
     # Create grid points for the new slice
     x_slice, y_slice = np.meshgrid(np.arange(-max_dim/2, max_dim/2),
                                    np.arange(-max_dim/2, max_dim/2))
-
+    if debug: print('x_slice', x_slice.shape); print('max', np.max(x_slice,axis=1)); print('min', np.min(x_slice,axis=1))
+    if debug: print('y_slice', y_slice.shape); print('max', np.max(y_slice,axis=1)); print('min', np.min(y_slice,axis=1))
     sliced_matrix_list = []
     
     # Iterate through slices along the normal vector
     max_travel = int(np.ceil(np.linalg.norm(array_center))) * 2
+
+    if debug: print('max_travel',max_travel)
+    num_print = 0
     for s in range(max_travel):
+        
         # Calculate the center point for the current slice
         pt = array_center + normal * (s - max_travel / 2)
-        
+
         # Check if the plane is reasonably within the volume bounds
         if not (0 <= pt[0] < original_shape[0] and 
                 0 <= pt[1] < original_shape[1] and 
@@ -90,18 +103,22 @@ def slice_matrix(V, normal, tolerance=0.5):
                  break
             else: # continue until we are in the volume
                  continue
-
+        num_print += 1
+        if debug and num_print < 5: print('iter',s);  print('pt',pt);  print('original_shape',original_shape)
 
         # Convert 2D slice grid points to 3D coordinates in the original volume
         points_3d = pt[:, np.newaxis, np.newaxis] + \
                     u[:, np.newaxis, np.newaxis] * x_slice + \
                     v[:, np.newaxis, np.newaxis] * y_slice
-
+        if debug and num_print < 5: print('points_3d.shape',points_3d.shape); print('points_3d',points_3d); 
         # Sample the volume at these 3D coordinates
         # Note: map_coordinates expects coordinates in (z, y, x) order for a (depth, height, width) array
         coords_for_map = [points_3d[2], points_3d[1], points_3d[0]]
+        if debug and num_print < 5: print('points_3d[2]',points_3d[2].shape); print('points_3d[1]',points_3d[1].shape); print('points_3d[0]',points_3d[0].shape);  print('coords_for_map',coords_for_map)
         oblique_slice = map_coordinates(V, coords_for_map, order=0, mode='constant', cval=0.0)
         
+        if debug and num_print < 5: print('oblique_slice',oblique_slice.shape)
+
         # If the slice is not empty, add it to our list
         if np.any(oblique_slice):
             sliced_matrix_list.append(oblique_slice)
