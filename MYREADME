@@ -5,9 +5,14 @@ rm -rdf renderer/BlenderToolBox_render/
 source /data/jhahn/slice_env/bin/activate
 source /data/jhahn/render_env/bin/activate
 
-nohup python myslicer.py /data/jhahn/data/brain_lightsheet/mask_stack.tif /data/jhahn/data/brain_lightsheet &
-python obj_2_pcd.py
-python generate_pc_data.py +data.save_pc_data_path=/data/jhahn/data/shape_dataset/pc_data/brain_lightsheet
+nohup python batch_slicer.py /data/jhahn/data/brain_lightsheet/stack.tif /data/jhahn/data/brain_lightsheet/my_brain &
+
+
+#nohup python myslicer.py /data/jhahn/data/brain_lightsheet/stack.tif /data/jhahn/data/brain_lightsheet/my_brain &
+#nohup python myslicer.py /data/jhahn/data/brain_lightsheet/stack.tif /home/jhahn/puzzlefusion-plusplus/2d_2_pcd/slicer_my_brain &
+
+nohup python obj_2_pcd.py --tiff_dir_root /data/jhahn/data/brain_lightsheet/slices --obj_dir_root /data/jhahn/data/shape_dataset/data/brain_lightsheet &
+nohup python generate_pc_data.py +data.save_pc_data_path=/data/jhahn/data/shape_dataset/pc_data/brain_lightsheet &
 
 
 

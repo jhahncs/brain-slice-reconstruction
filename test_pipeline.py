@@ -123,7 +123,7 @@ def _gen_pc_data(cfg, loader, data_type):
 def tiff_2_obj(cfg, tiff_dir_root, tickness, spacing, obj_dir_root, pc_dir_root):
         
 
-    obj_dir_list_relative = obj_2_pcd.tiff_2_obj_parallel(tiff_dir_root, None, tickness,spacing,obj_dir_root)
+    obj_dir_list_relative = obj_2_pcd.tiff_2_obj_parallel(tiff_dir_root, None, tickness,obj_dir_root)
     obj_dir_list_relative
 
     with open(obj_dir_root+"/test.txt",'w') as f:
@@ -170,7 +170,7 @@ def tiff_2_obj(cfg, tiff_dir_root, tickness, spacing, obj_dir_root, pc_dir_root)
     return obj_dir_list_relative
 
 
-def inference(cfg, project_root, pc_dir_root, obj_dir_list_relative, ckpt_path, inference_dir_root):       
+def inference(cfg, pc_dir_root, obj_dir_list_relative, ckpt_path, inference_dir_root):       
     
 
     with open_dict(cfg):
@@ -178,10 +178,10 @@ def inference(cfg, project_root, pc_dir_root, obj_dir_list_relative, ckpt_path, 
         cfg.denoiser.data.data_val_dir = pc_dir_root + "/"+obj_dir_list_relative[0]
         #cfg.denoiser.ckpt_path= data_home_dir+f'output/denoiser/everyday_epoch100_bs64/training/last.ckpt'
         cfg.denoiser.ckpt_path= ckpt_path
-        cfg.inference_dir= ""
+        cfg.inference_dir= inference_dir_root
         cfg.denoiser.data.val_batch_size=1
         cfg.verifier.max_iters = 1
-        cfg.experiment_output_path = project_root
+        #cfg.experiment_output_path = project_root
         #cfg.verifier.ckpt_path= '/disk2/data/breaking-bad-dataset/output/verifier/everyday_epoch100_bs64/training/last.ckpt'
 
     print(cfg)

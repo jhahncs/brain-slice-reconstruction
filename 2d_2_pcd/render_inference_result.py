@@ -82,8 +82,18 @@ def get_vertices(inference_result_dir, objs_dir, device = None, max_points = 100
     min_list = []
     max_list = []
     for _i, pcd_file_name in enumerate(tqdm(obj_file_list)):
-        vertices = pytorch3d.io.load_obj(pcd_file_name, device=device)[0]
+        if pcd_file_name.endswith('.glb'):
+
+            _glb = trimesh.load(pcd_file_name)
+            all_vertices = [geom.vertices for geom in _glb.geometry.values()]
+            combined_vertices = np.vstack(all_vertices)
+            vertices = torch.tensor(combined_vertices, dtype=torch.float32, device=device)
+
+            #vertices = trimesh.PointCloud(vertices=combined_vertices)
+        else:
+            vertices = pytorch3d.io.load_obj(pcd_file_name, device=device)[0]
         N, dim = vertices.shape
+        #print(pcd_file_name,vertices.shape)
         if N > max_points:
             #print(N)
             random_indices = torch.randperm(vertices.shape[0])[:max_points]

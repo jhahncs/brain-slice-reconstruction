@@ -47,11 +47,12 @@ def remove_zero_slices(matrix):
 # Core Slicing Function
 # ====================================================================
 
-def slice_matrix(V, normal, tolerance=0.5, debug=False):
+def slice_matrix(V, normal, tolerance=0.5, debug=False, slice_gap=1):
     """
     Reslices a 3D volume V along a plane defined by the normal vector.
     This function is a Python equivalent of MATLAB's obliqueslice.
     """
+
     # Normalize the normal vector
     normal = np.array(normal) / np.linalg.norm(normal)
     if debug: print('normal',normal)
@@ -59,6 +60,13 @@ def slice_matrix(V, normal, tolerance=0.5, debug=False):
     original_shape = np.array(V.shape)
     array_center = original_shape / 2
     if debug: print('original_shape',original_shape)
+    if debug: print('array_center',array_center)
+    #print(int(original_shape[0]/2))
+    #print(V[int(original_shape[0]/2)].shape, V[int(original_shape[0]/2)])
+    print(len(np.min(V[int(original_shape[0]/2)],axis=1)),len(np.max(V[int(original_shape[0]/2)],axis=1)))
+    print(np.min(np.min(V[int(original_shape[0]/2)],axis=0),axis=0),np.max(np.max(V[int(original_shape[0]/2)],axis=0),axis=0))
+    
+    V[int(original_shape[0]/2)].flatten()
     
     # Create an orthonormal basis for the slicing plane
     u = np.array([-normal[1], normal[0], 0])
@@ -90,34 +98,38 @@ def slice_matrix(V, normal, tolerance=0.5, debug=False):
 
     if debug: print('max_travel',max_travel)
     num_print = 0
-    for s in range(max_travel):
+    for s in range(0,max_travel,slice_gap):
         
         # Calculate the center point for the current slice
         pt = array_center + normal * (s - max_travel / 2)
-
+        #pt = array_center + normal * (s - max_travel / 2)
         # Check if the plane is reasonably within the volume bounds
-        if not (0 <= pt[0] < original_shape[0] and 
-                0 <= pt[1] < original_shape[1] and 
+        if not (0 <= pt[0] < original_shape[0] and
+                0 <= pt[1] < original_shape[1] and
                 0 <= pt[2] < original_shape[2]):
-            if len(sliced_matrix_list) > 0 : # Stop if we have collected slices and moved out
-                 break
-            else: # continue until we are in the volume
-                 continue
+            if len(sliced_matrix_list) > 0:  # Stop if we have collected slices and moved out
+                break
+            else:  # continue until we are in the volume
+                continue
+
         num_print += 1
-        if debug and num_print < 5: print('iter',s);  print('pt',pt);  print('original_shape',original_shape)
+        if debug and num_print < 3: print('iter',s);  print('pt',pt);  print('original_shape',original_shape)
 
         # Convert 2D slice grid points to 3D coordinates in the original volume
         points_3d = pt[:, np.newaxis, np.newaxis] + \
                     u[:, np.newaxis, np.newaxis] * x_slice + \
                     v[:, np.newaxis, np.newaxis] * y_slice
-        if debug and num_print < 5: print('points_3d.shape',points_3d.shape); print('points_3d',points_3d); 
+        if debug and num_print < 3: print('points_3d.shape',points_3d.shape); print('points_3d',points_3d); 
         # Sample the volume at these 3D coordinates
         # Note: map_coordinates expects coordinates in (z, y, x) order for a (depth, height, width) array
         coords_for_map = [points_3d[2], points_3d[1], points_3d[0]]
-        if debug and num_print < 5: print('points_3d[2]',points_3d[2].shape); print('points_3d[1]',points_3d[1].shape); print('points_3d[0]',points_3d[0].shape);  print('coords_for_map',coords_for_map)
+        if debug and num_print < 3: print('points_3d[2]',points_3d[2].shape); print('points_3d[1]',points_3d[1].shape); print('points_3d[0]',points_3d[0].shape);  print('coords_for_map',coords_for_map)
         oblique_slice = map_coordinates(V, coords_for_map, order=0, mode='constant', cval=0.0)
         
-        if debug and num_print < 5: print('oblique_slice',oblique_slice.shape)
+        if debug and num_print < 3: 
+            print('oblique_slice',oblique_slice.shape); print('oblique_slice',oblique_slice); 
+            print(np.min(np.min(oblique_slice,axis=0),axis=0),np.max(np.max(oblique_slice,axis=0),axis=0))
+    
 
         # If the slice is not empty, add it to our list
         if np.any(oblique_slice):
@@ -129,7 +141,7 @@ def slice_matrix(V, normal, tolerance=0.5, debug=False):
 
     # Stack the collected slices into a new 3D matrix
     sliced_matrix = np.stack(sliced_matrix_list, axis=-1)
-    
+    print('sliced_matrix',sliced_matrix.shape)
     return remove_zero_slices(sliced_matrix)
 
 
@@ -146,7 +158,7 @@ def visualize_volumes(original_volume, transformed_volume, original_title="Origi
     grid_transformed = pv.wrap(transformed_volume)
 
     # Set up the plotter
-    plotter = pv.Plotter(shape=(1, 2), window_size=[1600, 800])
+    plotter = pv.Plotter(shape=(1, 2), window_size=[1600, 800], off_screen=True)
 
     # Plot original volume
     plotter.subplot(0, 0)
@@ -162,31 +174,54 @@ def visualize_volumes(original_volume, transformed_volume, original_title="Origi
 
     # Link cameras so they move together
     plotter.link_views()
-    
+
     print("Displaying original and transformed volumes. Close the window to continue.")
-    plotter.show()
+    #plotter.show()
+    plotter.screenshot('my_sphere_scene.png')
+from matplotlib.colors import LinearSegmentedColormap
 
 
-def show_slice_montage(volume, title="Slice Montage"):
+def show_slice_montage(volume, title="Slice Montage", output_filename=""):
     """Displays a montage of the slices in the volume."""
+
+    # Define the colors and their corresponding positions (0 to 1)
+    colors = [(0, 'black'), (0.5, 'grey'), (1.0, 'white')] 
+    # (position, color_name_or_hex_code)
+
+    # Create the custom colormap
+    custom_cmap = LinearSegmentedColormap.from_list("my_custom_cmap", colors)
+
+
     num_slices = volume.shape[2]
     cols = int(np.ceil(np.sqrt(num_slices)))
     rows = int(np.ceil(num_slices / cols))
-    
-    fig, axes = plt.subplots(rows, cols, figsize=(12, 12))
+
+    sliced_volume = volume.copy().astype(float)
+    sliced_volume[sliced_volume == 255] = 1.0
+    sliced_volume[sliced_volume == 128] = 0.5
+
+    fig, axes = plt.subplots(rows, cols, figsize=(num_slices, num_slices))
     axes = axes.flatten()
-    
+    #slice_2d = (volume /  255) 
     for i in range(num_slices):
-        axes[i].imshow(volume[:, :, i], cmap='gray')
+        #print(i, np.min(np.min(volume[:,:,i],axis=0),axis=0),np.max(np.max(volume[:,:,i],axis=0),axis=0))
+        #unique_values, counts = np.unique(sliced_volume[:, :, i].flatten(), return_counts=True)
+        #print(i)
+        #for i in range(len(unique_values)):
+        #    print(f"{unique_values[i]} : {counts[i]} ")
+
+
+        axes[i].imshow(sliced_volume[:, :, i], cmap=custom_cmap, vmin=0.0, vmax = 1.0)
         axes[i].axis('off')
         axes[i].set_title(f'Slice {i}')
         
     for i in range(num_slices, len(axes)):
         axes[i].axis('off') # Hide unused subplots
         
-    fig.suptitle(title, fontsize=16)
+    fig.suptitle(f'{title}, {num_slices} slices', fontsize=16)
     plt.tight_layout()
-    plt.show()
+    #plt.show()
+    plt.savefig(output_filename) 
 
 
 # ====================================================================

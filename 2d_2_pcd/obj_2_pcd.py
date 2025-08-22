@@ -8,6 +8,9 @@ from vedo import dataurl, printc, Plotter, Points, Mesh, Text2D
 import torch
 import shutil
 import slice_util
+import argparse
+import trimesh
+from tqdm import tqdm # 1. tqdm 라이브러리를 임포트합니다.
 
 def pcd_2_mesh(pdc_filename, mesh_filename):
     mesh = Mesh(pdc_filename)
@@ -34,7 +37,8 @@ def tiff_2_pcd(offset_y, tiff_filename_full, output_dir, tickness, overwrite=Tru
 
     slice_filename_arr = tiff_filename_full.split("/")
     slice_filename_itself = slice_filename_arr[len(slice_filename_arr)-1].split(".")[0]
-    obj_filename = f'{slice_filename_itself}.obj'
+    #obj_filename = f'{slice_filename_itself}.obj'
+    obj_filename = f'{slice_filename_itself}.glb'
     pcd_filename = f'{output_dir}/{obj_filename}'
     if not overwrite and os.path.exists(pcd_filename):
         return pcd_filename
@@ -104,11 +108,19 @@ def tiff_2_pcd(offset_y, tiff_filename_full, output_dir, tickness, overwrite=Tru
 
 
     #print(f'{tiff_filename_full}_{np.min(xyz_list, axis=0)[1]}_{np.max(xyz_list, axis=0)[1]}_{y_min}_{y_max}')
-
+    '''
     with open(pcd_filename,'w') as f:
         for xyz in xyz_list:
             f.write(f'v {xyz[0]} {xyz[1]} {xyz[2]}\n')
+    '''
 
+
+    point_cloud = trimesh.PointCloud(vertices=np.array(xyz_list))
+
+    #print(f"Exporting to binary GLB format at '{glb_path}'...")
+    # 'export' handles the conversion to a self-contained binary file
+    point_cloud.export(file_obj=pcd_filename)
+    #os.remove(pcd_filename)
     #mesh_filename = f'{slice_filename_itself}.ply'
     #print(f'{output_dir}/{mesh_filename}')
     #pcd_2_mesh(f'{output_dir}/{obj_filename}',f'{output_dir}/{mesh_filename}')
@@ -168,14 +180,16 @@ def main():
 
 
 
-def tiff_2_obj_parallel(tiff_dir_root, data_ids, tickness, spacing, obj_dir_root):
-    offset_y_list = []
-    tiff_filename_list = []
-    obj_dir_root_list = []
-    tickness_list = []
+def tiff_2_obj_parallel(tiff_dir_root, data_ids, tickness, obj_dir_root):
     obj_dir_list = []
+    tasks_to_run = []
+    if data_ids is None: # not used
 
-    if data_ids is None:
+        obj_dir = f'{obj_dir_root}/{tickness:.3f}/fractured_0'
+        if os.path.exists(obj_dir):
+            print("tiff_2_obj_parallel EXIST:",obj_dir)
+            return
+
         tiff_dir = f'{tiff_dir_root}'
         image_filename_list = []
         for f in os.listdir(tiff_dir):
@@ -184,18 +198,35 @@ def tiff_2_obj_parallel(tiff_dir_root, data_ids, tickness, spacing, obj_dir_root
             image_filename_list.append(tiff_dir+"/"+f)
         image_filename_list.sort(key = lambda x: int(x.split("/")[-1].split(".")[-2]))
 
-        obj_dir = f'{obj_dir_root}/{tickness:.3f}_{spacing:.3f}/fractured_0'
+        
         os.makedirs(obj_dir, exist_ok = True)
+        '''
+        offset_y_list = []
+        tiff_filename_list = []
+        obj_dir_root_list = []
+        tickness_list = []
+        
         for _i, orginal_filename in enumerate(image_filename_list):
             offset_y_list.append(_i*spacing)
             tiff_filename_list.append(orginal_filename)
             obj_dir_root_list.append(obj_dir)
             tickness_list.append(tickness)
-        obj_dir_list.append(f'{tickness:.3f}_{spacing:.3f}')
+        '''
+        
+        for _i, orginal_filename in enumerate(image_filename_list):
+            # for g in range(1, 11): # 여러 gap을 테스트하려면 이 루프를 활성화하세요.
+            tasks_to_run.append((_i*tickness,orginal_filename,obj_dir, tickness))
+                
+
+        obj_dir_list.append(f'{tickness:.3f}')
     else:
             
         for data_id in data_ids:
 
+            obj_dir = f'{obj_dir_root}/{data_id}_{tickness:.3f}/fractured_0'
+            if os.path.exists(obj_dir):
+                print("tiff_2_obj_parallel EXIST:",obj_dir)
+                continue
 
             tiff_dir = f'{tiff_dir_root}/{data_id}'
             image_filename_list = []
@@ -205,38 +236,52 @@ def tiff_2_obj_parallel(tiff_dir_root, data_ids, tickness, spacing, obj_dir_root
                 image_filename_list.append(tiff_dir+"/"+f)
             image_filename_list.sort(key = lambda x: int(x.split("/")[-1].split(".")[-2]))
 
-            obj_dir = f'{obj_dir_root}/{data_id}_{tickness:.3f}_{spacing:.3f}/fractured_0'
             os.makedirs(obj_dir, exist_ok = True)
+            '''
             for _i, orginal_filename in enumerate(image_filename_list):
                 offset_y_list.append(_i*spacing)
                 tiff_filename_list.append(orginal_filename)
                 obj_dir_root_list.append(obj_dir)
                 tickness_list.append(tickness)
-            obj_dir_list.append(f'{data_id}_{tickness:.3f}_{spacing:.3f}/fractured_0')
+            '''
+            for _i, orginal_filename in enumerate(image_filename_list):
+                # for g in range(1, 11): # 여러 gap을 테스트하려면 이 루프를 활성화하세요.
+                tasks_to_run.append((_i*tickness, orginal_filename,obj_dir, tickness))
+                
+            obj_dir_list.append(f'{data_id}_{tickness:.3f}/fractured_0')
 
 
-    print(f'_tiff_2_obj: the number of jobs:{len(tiff_filename_list)}')
+    print(f'_tiff_2_obj: the number of jobs:{len(tasks_to_run)}')
     with multiprocessing.Pool() as pool: # Use a pool of 4 processes
-        pool.starmap(tiff_2_pcd, zip(offset_y_list,tiff_filename_list, obj_dir_root_list, tickness_list))
+        #pool.starmap(tiff_2_pcd, zip(offset_y_list,tiff_filename_list, obj_dir_root_list, tickness_list))
+        pool.starmap(tiff_2_pcd, tqdm(tasks_to_run, total=len(tasks_to_run), desc="tiff_2_pcd"))
 
     return obj_dir_list
 
-def distribute_obj_files(data_ids, tickness, spacing, obj_dir_root, from_index, to_index, num_of_slices):
+def distribute_obj_files(data_ids, tickness, spacing, obj_dir_root, from_index, to_index, max_num_of_slices):
     for data_id in data_ids:
-        for start_index in range(int((to_index-from_index)/num_of_slices)):
-            obj_dir = f'{obj_dir_root}/{data_id}_{tickness:.3f}_{spacing:.3f}/fractured_0'
+        for start_index in range(0, spacing):
+            obj_dir = f'{obj_dir_root}/{data_id}_{tickness:.3f}/fractured_0'
 
             obj_filename_list = []
             for f in os.listdir(obj_dir):
                 obj_filename_list.append(obj_dir+"/"+f)
             obj_filename_list.sort(key = lambda x: int(x.split("/")[-1].split(".")[-2]))
 
-
-            obj_filename_list_sub = obj_filename_list[from_index + start_index : to_index : int((to_index - from_index) / num_of_slices) + 1]
-
+            #print(obj_filename_list)
+            #print(from_index,start_index,to_index,num_of_slices)
+            #print(from_index + start_index, to_index, int((to_index - from_index) / num_of_slices) + 1)
+            #obj_filename_list_sub = obj_filename_list[from_index + start_index : to_index : int((to_index - from_index) / spacing) + 1]
+            obj_filename_list_sub = obj_filename_list[from_index + start_index : to_index : spacing]
+            if len(obj_filename_list_sub) > max_num_of_slices:
+                obj_filename_list_sub = obj_filename_list_sub[:max_num_of_slices]
+            #print(obj_filename_list_sub)
             start_data_id = obj_filename_list_sub[0].split("/")[-1].split(".")[-2]
             #end_data_id = obj_filename_list_sub[-1].split("/")[-1].split(".")[-2]
-            obj_slicing_dir = f'{obj_dir_root}/{data_id}_{tickness:.3f}_{spacing:.3f}_{start_data_id}_{to_index}/fractured_0'
+            obj_slicing_dir = f'{obj_dir_root}/{data_id}_{tickness:.3f}_{spacing}_{start_data_id}_{to_index}/fractured_0'
+            if os.path.exists(obj_slicing_dir):
+                print("distribute_obj_files EXISTS:",obj_slicing_dir)
+                continue
             os.makedirs(obj_slicing_dir, exist_ok = True)
             obj_file_list = []
             for orginal_filename in obj_filename_list_sub:
@@ -293,7 +338,7 @@ def obj_augmentation(data_name, data_count, tickness, spacing,obj_dir_root, data
 
 
 
-
+import sys
 
 
 
@@ -302,28 +347,45 @@ def obj_augmentation(data_name, data_count, tickness, spacing,obj_dir_root, data
 
 if __name__ == "__main__":
 
+
+
+    parser = argparse.ArgumentParser(
+        description="convert tiff to obj",
+        formatter_class=argparse.RawTextHelpFormatter)
+        
+    parser.add_argument("--tiff_dir_root",required=True, help="Path to the input TIFF file.")
+    parser.add_argument("--obj_dir_root",required=True, help="Base directory to save the parameter-named output folder.")
+    args = parser.parse_args()
+
+
     data_ids = ['0408']
 
-    tiff_dir_root = '/data/jhahn/data/brain_lightsheet'
-    obj_dir_root = '/data/jhahn/data/shape_dataset/data/brain_lightsheet'
-
-    data_ids = os.listdir(tiff_dir_root)
-    data_ids = [w for w in data_ids if os.path.isdir(tiff_dir_root+"/"+w) and w.startswith("mask_")]
+    #tiff_dir_root = '/data/jhahn/data/brain_lightsheet'
+    #obj_dir_root = '/data/jhahn/data/shape_dataset/data/brain_lightsheet'
+    
+    data_ids = os.listdir(args.tiff_dir_root)
+    data_ids = [w for w in data_ids if os.path.isdir(args.tiff_dir_root+"/"+w)]
 
 
     from_index=100
-    start_index=0
-    to_index=200
-    num_of_slices=20
-    tickness_list_const = [0.001, 0.003, 0.005]
-    
-    spacing = 0.007
-    
-    for tickness in tickness_list_const:
-        print(tickness)
-        tiff_2_obj_parallel(tiff_dir_root, data_ids, tickness,spacing,obj_dir_root)
-        distribute_obj_files(data_ids, tickness, spacing, obj_dir_root, from_index, to_index, num_of_slices)
+    to_index=700
+    #num_of_slices=20
+    tickness_list_const = [0.001]
+    #tickness_list_const = [0.001, 0.005]
+    spacing_list = [10, 15, 20, 15, 30, 35, 40, 45, 50]
+    from_index_list = [0, 50, 100, 150, 200, 250, 300]
+    max_num_of_slices = 19
 
+    for from_index in from_index_list:
+        for tickness in tickness_list_const:
+            for spacing in spacing_list:
+                print('spacing: ',spacing)
+                tiff_2_obj_parallel( args.tiff_dir_root, data_ids, tickness,   args.obj_dir_root)
+                distribute_obj_files(data_ids, tickness, spacing, args.obj_dir_root, from_index, to_index, max_num_of_slices)
+                #if True:
+                #    break
+    if True:
+        sys.exit()
 
     tickness_list = []
     obj_dir_root_list = []
@@ -371,5 +433,6 @@ if __name__ == "__main__":
             #obj_augmentation(obj_dir_root, '0408', '0088', '0089','215','0')
     print(f'obj_augmentation: the number of jobs:{len(to_index_list)}')
     with multiprocessing.Pool() as pool: # Use a pool of 4 processes
-        pool.starmap(obj_augmentation, zip(data_name_list,data_count_list,tickness_list, obj_dir_root_list, data_id_list, from_index_list, start_index_list, to_index_list))
+        pool.starmap(obj_augmentation, zip(data_name_list,data_count_list,tickness_list, 
+                                           obj_dir_root_list, data_id_list, from_index_list, start_index_list, to_index_list))
 

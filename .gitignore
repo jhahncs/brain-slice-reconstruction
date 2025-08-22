@@ -15,7 +15,7 @@ chamferdist/
 web/static/
 web/flask_session/
 __pycache__
-
+web/files
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

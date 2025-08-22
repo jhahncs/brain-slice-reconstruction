@@ -11,10 +11,10 @@ _brain_10_parts
 
 python render_results.py \
     experiment_name=everyday_epoch2000_bs64 \
-    inference_dir=brain_block_for_brain_block \
+    inference_dir=brain_lightsheet_from_100 \
     renderer.num_samples=20 \
     renderer.mesh_path=/data/jhahn/data/shape_dataset/data/ \
-    renderer.output_path=brain_block_for_brain_block \
+    renderer.output_path=brain_lightsheet_from_100 \
     renderer.blender.imgRes_x=512 \
     renderer.blender.imgRes_y=512 \
     renderer.blender.numSamples=50
