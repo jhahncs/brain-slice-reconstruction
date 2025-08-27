@@ -32,7 +32,8 @@ def padding_to_image(image, padding_size=100):
 
     return _image.astype(np.float32)
 
-def tiff_2_pcd(offset_y, tiff_filename_full, output_dir, tickness, overwrite=True):
+def tiff_2_pcd(num_of_missing_slices, offset_y, tiff_filename_full, output_dir, 
+               tickness, overwrite=True, no_gap_between_slices = True, from_index = 0, to_index = 0, max_num_of_slices = 0):
 
 
     slice_filename_arr = tiff_filename_full.split("/")
@@ -44,7 +45,7 @@ def tiff_2_pcd(offset_y, tiff_filename_full, output_dir, tickness, overwrite=Tru
         return pcd_filename
 
     os.makedirs(output_dir, exist_ok = True)
-    num_of_poinst_tickness = 10
+    
     #row_index = int(index/10)
     #col_index = int(index%10)
     image = cv2.imread(tiff_filename_full, cv2.IMREAD_COLOR)
@@ -69,28 +70,41 @@ def tiff_2_pcd(offset_y, tiff_filename_full, output_dir, tickness, overwrite=Tru
 
     hull_area_list.sort(key = lambda x :x[2], reverse=True)
     outer_points = hull_area_list[0][0].squeeze(axis=1)
-
     
-    y_min = offset_y
+    y_min = offset_y * tickness
+
+    #num_of_poinst_tickness = 10
+    if no_gap_between_slices:
+        tickness = tickness *  (num_of_missing_slices+1)
+        #num_of_poinst_tickness = 10 *  int( (num_of_missing_slices+1) )
+    
     #print('y_min',y_min)
     y_max = y_min + tickness
+    y_random_numbers = [random.uniform(y_min, y_max) for _ in range(5 *int((num_of_missing_slices+1)))]
+
     xyz_list = []
     for i, x in np.ndenumerate(canny_image):
         if x > 0 :
             xyz_list.append([(canny_image.shape[1]-i[1])/(canny_image.shape[1]), y_min, (canny_image.shape[0]-i[0])/(canny_image.shape[0])])
             xyz_list.append([(canny_image.shape[1]-i[1])/(canny_image.shape[1]), y_max, (canny_image.shape[0]-i[0])/(canny_image.shape[0])])
+            for y in y_random_numbers:
+                xyz_list.append([(canny_image.shape[1]-i[1])/(canny_image.shape[1]), y, (canny_image.shape[0]-i[0])/(canny_image.shape[0])])
+
+    '''
+    min_value = y_min
+    max_value = tickness + y_min
+    random_numbers = [random.uniform(min_value, max_value) for _ in range(50 *int((num_of_missing_slices+1)))]
     
     for i in range(outer_points.shape[0]):
-        min_value = (tickness/num_of_poinst_tickness)*1 + y_min
-        max_value = (tickness/num_of_poinst_tickness)*num_of_poinst_tickness + y_min
-        min_value = y_min
-        max_value = tickness + y_min
+        #min_value = (tickness/num_of_poinst_tickness)*1 + y_min
+        #max_value = (tickness/num_of_poinst_tickness)*num_of_poinst_tickness + y_min
+
 
         # 5개의 랜덤한 소수점 숫자 생성
-        random_numbers = [random.uniform(min_value, max_value) for _ in range(100)]
+        
         for y in random_numbers:
             xyz_list.append([(gray_image.shape[1]-outer_points[i][0])/(gray_image.shape[1]), y, (gray_image.shape[0]-outer_points[i][1])/(gray_image.shape[0])])
-    
+    '''
     for xyz in xyz_list:
         xyz[0] = 1.0 - xyz[0] 
         #xyz[1] *= 0.1
@@ -180,12 +194,14 @@ def main():
 
 
 
-def tiff_2_obj_parallel(tiff_dir_root, data_ids, tickness, obj_dir_root):
+def tiff_2_obj_parallel(tiff_dir_root, data_ids, tickness:float, num_of_missing_slices, obj_dir_root, no_gap_between_slices,
+                from_index, to_index, max_num_of_slices):
     obj_dir_list = []
     tasks_to_run = []
+    
     if data_ids is None: # not used
 
-        obj_dir = f'{obj_dir_root}/{tickness:.3f}/fractured_0'
+        obj_dir = f'{obj_dir_root}/{tickness:.3f}_{no_gap_between_slices}/fractured_0'
         if os.path.exists(obj_dir):
             print("tiff_2_obj_parallel EXIST:",obj_dir)
             return
@@ -215,19 +231,19 @@ def tiff_2_obj_parallel(tiff_dir_root, data_ids, tickness, obj_dir_root):
         
         for _i, orginal_filename in enumerate(image_filename_list):
             # for g in range(1, 11): # 여러 gap을 테스트하려면 이 루프를 활성화하세요.
-            tasks_to_run.append((_i*tickness,orginal_filename,obj_dir, tickness))
+            tasks_to_run.append((num_of_missing_slices, _i,orginal_filename,obj_dir, tickness, no_gap_between_slices))
                 
 
-        obj_dir_list.append(f'{tickness:.3f}')
+        obj_dir_list.append(f'{tickness:.3f}_{no_gap_between_slices}')
     else:
             
         for data_id in data_ids:
-
-            obj_dir = f'{obj_dir_root}/{data_id}_{tickness:.3f}/fractured_0'
+            '''
+            obj_dir = f'{obj_dir_root}/{data_id}_{tickness:.3f}_{no_gap_between_slices}/fractured_0'
             if os.path.exists(obj_dir):
                 print("tiff_2_obj_parallel EXIST:",obj_dir)
                 continue
-
+            '''
             tiff_dir = f'{tiff_dir_root}/{data_id}'
             image_filename_list = []
             for f in os.listdir(tiff_dir):
@@ -236,19 +252,46 @@ def tiff_2_obj_parallel(tiff_dir_root, data_ids, tickness, obj_dir_root):
                 image_filename_list.append(tiff_dir+"/"+f)
             image_filename_list.sort(key = lambda x: int(x.split("/")[-1].split(".")[-2]))
 
-            os.makedirs(obj_dir, exist_ok = True)
-            '''
-            for _i, orginal_filename in enumerate(image_filename_list):
-                offset_y_list.append(_i*spacing)
-                tiff_filename_list.append(orginal_filename)
-                obj_dir_root_list.append(obj_dir)
-                tickness_list.append(tickness)
-            '''
-            for _i, orginal_filename in enumerate(image_filename_list):
-                # for g in range(1, 11): # 여러 gap을 테스트하려면 이 루프를 활성화하세요.
-                tasks_to_run.append((_i*tickness, orginal_filename,obj_dir, tickness))
+            #os.makedirs(obj_dir, exist_ok = True)
+
+
+            for start_index in range(0, num_of_missing_slices + 1):
+
+
+                image_filename_list_sub = image_filename_list[from_index + start_index : to_index : num_of_missing_slices + 1]
+                if len(image_filename_list_sub) > max_num_of_slices:
+                    image_filename_list_sub = image_filename_list_sub[:max_num_of_slices]
+                #print(image_filename_list_sub)
+                start_data_id = image_filename_list_sub[0].split("/")[-1].split(".")[-2]
+                #end_data_id = image_filename_list_sub[-1].split("/")[-1].split(".")[-2]
+                obj_slicing_dir = f'{obj_dir_root}/{data_id}_{tickness:.3f}_{no_gap_between_slices}_{num_of_missing_slices}_{start_data_id}_{to_index}/fractured_0'
+                if os.path.exists(obj_slicing_dir):
+                    print("distribute_obj_files EXISTS:",obj_slicing_dir)
+                    continue
+                os.makedirs(obj_slicing_dir, exist_ok = True)
+                _num_of_slices = 0
+                for _i in range(from_index + start_index, len(image_filename_list), num_of_missing_slices + 1):
                 
-            obj_dir_list.append(f'{data_id}_{tickness:.3f}/fractured_0')
+                    '''
+                    obj_dir = f'{obj_dir_root}/{data_id}_{tickness:.3f}_{no_gap_between_slices}/fractured_0'
+
+                    obj_filename_list = []
+                    for f in os.listdir(obj_dir):
+                        obj_filename_list.append(obj_dir+"/"+f)
+                    obj_filename_list.sort(key = lambda x: int(x.split("/")[-1].split(".")[-2]))
+                    '''
+
+                    _num_of_slices += 1
+
+                    if max_num_of_slices <= _num_of_slices:
+                        break 
+                    tasks_to_run.append((num_of_missing_slices, _i - (from_index + start_index), image_filename_list[_i], obj_slicing_dir, 
+                                        tickness, no_gap_between_slices,
+                                        from_index, to_index, max_num_of_slices))
+
+
+                
+            #obj_dir_list.append(f'{data_id}_{tickness:.3f}_{no_gap_between_slices}/fractured_0')
 
 
     print(f'_tiff_2_obj: the number of jobs:{len(tasks_to_run)}')
@@ -258,10 +301,10 @@ def tiff_2_obj_parallel(tiff_dir_root, data_ids, tickness, obj_dir_root):
 
     return obj_dir_list
 
-def distribute_obj_files(data_ids, tickness, spacing, obj_dir_root, from_index, to_index, max_num_of_slices):
+def distribute_obj_files(data_ids, tickness, num_of_missing_slices:int, obj_dir_root, from_index, to_index, max_num_of_slices, no_gap_between_slices):
     for data_id in data_ids:
-        for start_index in range(0, spacing):
-            obj_dir = f'{obj_dir_root}/{data_id}_{tickness:.3f}/fractured_0'
+        for start_index in range(0, num_of_missing_slices):
+            obj_dir = f'{obj_dir_root}/{data_id}_{tickness:.3f}_{no_gap_between_slices}/fractured_0'
 
             obj_filename_list = []
             for f in os.listdir(obj_dir):
@@ -272,13 +315,13 @@ def distribute_obj_files(data_ids, tickness, spacing, obj_dir_root, from_index, 
             #print(from_index,start_index,to_index,num_of_slices)
             #print(from_index + start_index, to_index, int((to_index - from_index) / num_of_slices) + 1)
             #obj_filename_list_sub = obj_filename_list[from_index + start_index : to_index : int((to_index - from_index) / spacing) + 1]
-            obj_filename_list_sub = obj_filename_list[from_index + start_index : to_index : spacing]
+            obj_filename_list_sub = obj_filename_list[from_index + start_index : to_index : num_of_missing_slices]
             if len(obj_filename_list_sub) > max_num_of_slices:
                 obj_filename_list_sub = obj_filename_list_sub[:max_num_of_slices]
             #print(obj_filename_list_sub)
             start_data_id = obj_filename_list_sub[0].split("/")[-1].split(".")[-2]
             #end_data_id = obj_filename_list_sub[-1].split("/")[-1].split(".")[-2]
-            obj_slicing_dir = f'{obj_dir_root}/{data_id}_{tickness:.3f}_{spacing}_{start_data_id}_{to_index}/fractured_0'
+            obj_slicing_dir = f'{obj_dir_root}/{data_id}_{tickness:.3f}_{no_gap_between_slices}_{num_of_missing_slices}_{start_data_id}_{to_index}/fractured_0'
             if os.path.exists(obj_slicing_dir):
                 print("distribute_obj_files EXISTS:",obj_slicing_dir)
                 continue
@@ -365,25 +408,29 @@ if __name__ == "__main__":
     
     data_ids = os.listdir(args.tiff_dir_root)
     data_ids = [w for w in data_ids if os.path.isdir(args.tiff_dir_root+"/"+w)]
-
-
-    from_index=100
+    #data_ids = data_ids[:1]
+    print(data_ids)
     to_index=700
     #num_of_slices=20
     tickness_list_const = [0.001]
+    no_gap_between_slices_list = [True]
     #tickness_list_const = [0.001, 0.005]
-    spacing_list = [1, 2, 3, 4, 5] # 10, 15, 20, 15, 30, 35, 40, 45, 50]
-    from_index_list = [0, 50, 100, 150, 200, 250, 300]
+    num_of_missing_slices_list = sorted(list(range(0, 6, 1))) #[0, 1, 2, 3, 4, 5] # 10, 15, 20, 15, 30, 35, 40, 45, 50]
+    #num_of_missing_slices_list = [0, 5, 50]
+    from_index_list = sorted(list(range(50, 350, 50))) #[100, 150, 200, 250, 300, 0, 50]
     max_num_of_slices = 19
-
-    for from_index in from_index_list:
-        for tickness in tickness_list_const:
-            for spacing in spacing_list:
-                print('spacing: ',spacing)
-                tiff_2_obj_parallel( args.tiff_dir_root, data_ids, tickness,   args.obj_dir_root)
-                distribute_obj_files(data_ids, tickness, spacing, args.obj_dir_root, from_index, to_index, max_num_of_slices)
-                #if True:
-                #    break
+    for no_gap_between_slices in no_gap_between_slices_list:
+        for from_index in from_index_list:
+            for tickness in tickness_list_const:
+                for num_of_missing_slices in num_of_missing_slices_list:
+                    print('no_gap_between_slices: ',no_gap_between_slices)
+                    print('num_of_missing_slices: ',num_of_missing_slices)
+                    print('from_index: ',from_index)
+                    print('tickness: ',tickness)
+                    tiff_2_obj_parallel( args.tiff_dir_root, data_ids, tickness, num_of_missing_slices,  args.obj_dir_root, no_gap_between_slices, from_index, to_index, max_num_of_slices)
+#                    distribute_obj_files(data_ids, tickness, num_of_missing_slices, args.obj_dir_root, from_index, to_index, max_num_of_slices, no_gap_between_slices)
+                    #if True:
+                    #    break
     if True:
         sys.exit()
 
