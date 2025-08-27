@@ -372,7 +372,7 @@ if __name__ == "__main__":
     #num_of_slices=20
     tickness_list_const = [0.001]
     #tickness_list_const = [0.001, 0.005]
-    spacing_list = [10, 15, 20, 15, 30, 35, 40, 45, 50]
+    spacing_list = [1, 2, 3, 4, 5] # 10, 15, 20, 15, 30, 35, 40, 45, 50]
     from_index_list = [0, 50, 100, 150, 200, 250, 300]
     max_num_of_slices = 19
 
