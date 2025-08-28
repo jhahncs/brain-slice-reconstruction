@@ -33,7 +33,7 @@ def padding_to_image(image, padding_size=100):
     return _image.astype(np.float32)
 
 def tiff_2_pcd(num_of_missing_slices, offset_y, tiff_filename_full, output_dir, 
-               tickness, overwrite=True, no_gap_between_slices = True, from_index = 0, to_index = 0, max_num_of_slices = 0):
+               tickness, overwrite=True, no_gap_between_slices = True):
 
 
     slice_filename_arr = tiff_filename_full.split("/")
@@ -194,17 +194,13 @@ def main():
 
 
 
-def tiff_2_obj_parallel(tiff_dir_root, data_ids, tickness:float, num_of_missing_slices, obj_dir_root, no_gap_between_slices,
-                from_index, to_index, max_num_of_slices):
+def tiff_2_obj_parallel(tiff_dir_root, data_ids, tickness:float, 
+                        num_of_missing_slices = 0, obj_dir_root = "" , no_gap_between_slices = True,
+                from_index = 0, to_index = 0, max_num_of_slices = 19):
     obj_dir_list = []
     tasks_to_run = []
     
-    if data_ids is None: # not used
-
-        obj_dir = f'{obj_dir_root}/{tickness:.3f}_{no_gap_between_slices}/fractured_0'
-        if os.path.exists(obj_dir):
-            print("tiff_2_obj_parallel EXIST:",obj_dir)
-            return
+    if data_ids is None: # test mode
 
         tiff_dir = f'{tiff_dir_root}'
         image_filename_list = []
@@ -214,27 +210,15 @@ def tiff_2_obj_parallel(tiff_dir_root, data_ids, tickness:float, num_of_missing_
             image_filename_list.append(tiff_dir+"/"+f)
         image_filename_list.sort(key = lambda x: int(x.split("/")[-1].split(".")[-2]))
 
-        
-        os.makedirs(obj_dir, exist_ok = True)
-        '''
-        offset_y_list = []
-        tiff_filename_list = []
-        obj_dir_root_list = []
-        tickness_list = []
-        
-        for _i, orginal_filename in enumerate(image_filename_list):
-            offset_y_list.append(_i*spacing)
-            tiff_filename_list.append(orginal_filename)
-            obj_dir_root_list.append(obj_dir)
-            tickness_list.append(tickness)
-        '''
-        
-        for _i, orginal_filename in enumerate(image_filename_list):
-            # for g in range(1, 11): # 여러 gap을 테스트하려면 이 루프를 활성화하세요.
-            tasks_to_run.append((num_of_missing_slices, _i,orginal_filename,obj_dir, tickness, no_gap_between_slices))
-                
+        for _i in range(len(image_filename_list)):
 
-        obj_dir_list.append(f'{tickness:.3f}_{no_gap_between_slices}')
+            tasks_to_run.append((num_of_missing_slices, _i , image_filename_list[_i], obj_dir_root+"/test/fractured_0", 
+                                tickness, no_gap_between_slices))
+
+
+            
+        obj_dir_list.append("test/fractured_0")
+
     else:
             
         for data_id in data_ids:
@@ -286,8 +270,7 @@ def tiff_2_obj_parallel(tiff_dir_root, data_ids, tickness:float, num_of_missing_
                     if max_num_of_slices <= _num_of_slices:
                         break 
                     tasks_to_run.append((num_of_missing_slices, _i - (from_index + start_index), image_filename_list[_i], obj_slicing_dir, 
-                                        tickness, no_gap_between_slices,
-                                        from_index, to_index, max_num_of_slices))
+                                        tickness, no_gap_between_slices))
 
 
                 
@@ -412,12 +395,14 @@ if __name__ == "__main__":
     print(data_ids)
     to_index=700
     #num_of_slices=20
-    tickness_list_const = [0.001]
+    tickness_list_const = [0.001, 0.002]
     no_gap_between_slices_list = [True]
     #tickness_list_const = [0.001, 0.005]
     num_of_missing_slices_list = sorted(list(range(0, 6, 1))) #[0, 1, 2, 3, 4, 5] # 10, 15, 20, 15, 30, 35, 40, 45, 50]
     #num_of_missing_slices_list = [0, 5, 50]
+    num_of_missing_slices_list = [0]
     from_index_list = sorted(list(range(50, 350, 50))) #[100, 150, 200, 250, 300, 0, 50]
+    from_index_list = sorted(list(range(0, 350, 5))) #[100, 150, 200, 250, 300, 0, 50]
     max_num_of_slices = 19
     for no_gap_between_slices in no_gap_between_slices_list:
         for from_index in from_index_list:

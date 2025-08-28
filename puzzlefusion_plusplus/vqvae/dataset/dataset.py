@@ -78,7 +78,7 @@ class GeometryPartDataset(Dataset):
             
             for frac in fracs:
                 # we take both fractures and modes for training
-                #print('frac',fracs)
+                print('frac',fracs)
                 if 'fractured' not in frac and 'mode' not in frac:
                     continue
                 #print('frac',frac)
@@ -93,7 +93,7 @@ class GeometryPartDataset(Dataset):
                     _files = _files[:20]
                     num_parts = len(_files)
 
-                print('folder:',frac, ' num_parts:',num_parts)
+                #print('folder:',frac, ' num_parts:',num_parts)
                 #print(_files)
                 if self.min_num_part <= num_parts <= self.max_num_part:
                     data_list.append(frac)

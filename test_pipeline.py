@@ -80,6 +80,7 @@ def init_dir(files_root,data_ids):
     os.makedirs(obj_dir_root, exist_ok=True)
     os.makedirs(pc_dir_root, exist_ok=True)
     os.makedirs(render_output_dir, exist_ok=True)
+    os.makedirs(render_output_dir+"/objs", exist_ok=True)
 
     return tiff_dir_root, obj_dir_root, pc_dir_root, inference_dir_root, render_output_dir
 
@@ -120,14 +121,17 @@ def _gen_pc_data(cfg, loader, data_type):
 
 
 
-def tiff_2_obj(cfg, tiff_dir_root, tickness, spacing, obj_dir_root, pc_dir_root):
+def tiff_2_obj(cfg, tiff_dir_root, tickness,  obj_dir_root, pc_dir_root, num_of_missing_slices, no_gap_between_slices):
         
 
-    obj_dir_list_relative = obj_2_pcd.tiff_2_obj_parallel(tiff_dir_root, None, tickness,obj_dir_root)
-    obj_dir_list_relative
+#( args.tiff_dir_root, data_ids, tickness, num_of_missing_slices,  args.obj_dir_root, no_gap_between_slices, from_index, to_index, max_num_of_slices)
+    obj_dir_list_relative = obj_2_pcd.tiff_2_obj_parallel(tiff_dir_root, None, tickness, num_of_missing_slices, 
+                                                          obj_dir_root, no_gap_between_slices)
+    
 
     with open(obj_dir_root+"/test.txt",'w') as f:
-        f.write(obj_dir_list_relative[0])
+        #f.write(obj_dir_list_relative[0])
+        f.write("test\n")
 
     
 
@@ -163,7 +167,8 @@ def tiff_2_obj(cfg, tiff_dir_root, tickness, spacing, obj_dir_root, pc_dir_root)
     cfg.data.batch_size = 1
     cfg.data.val_batch_size = 1
     cfg.data.num_workers: 64 
-    cfg.data.save_pc_data_path = pc_dir_root + "/"+obj_dir_list_relative[0]
+    #cfg.data.save_pc_data_path = pc_dir_root + "/"+obj_dir_list_relative[0]
+    cfg.data.save_pc_data_path = pc_dir_root
 
     _gen_pc_data(cfg, test_loader, 'test')
 
@@ -175,7 +180,8 @@ def inference(cfg, pc_dir_root, obj_dir_list_relative, ckpt_path, inference_dir_
 
     with open_dict(cfg):
         #cfg.experiment_output_path = data_home_dir+'experiment_output/'
-        cfg.denoiser.data.data_val_dir = pc_dir_root + "/"+obj_dir_list_relative[0]
+        cfg.denoiser.data.data_val_dir = pc_dir_root# + "/"+obj_dir_list_relative[0]
+        #cfg.denoiser.data.data_val_dir = obj_dir_list_relative[0]
         #cfg.denoiser.ckpt_path= data_home_dir+f'output/denoiser/everyday_epoch100_bs64/training/last.ckpt'
         cfg.denoiser.ckpt_path= ckpt_path
         cfg.inference_dir= inference_dir_root
@@ -196,7 +202,7 @@ def inference(cfg, pc_dir_root, obj_dir_list_relative, ckpt_path, inference_dir_
 
     # load denoiser weights
     model = AutoAgglomerative(cfg)
-
+    
     denoiser_weights = torch.load(cfg.denoiser.ckpt_path)['state_dict']
 
     model.denoiser.load_state_dict(
@@ -216,10 +222,10 @@ def inference(cfg, pc_dir_root, obj_dir_list_relative, ckpt_path, inference_dir_
 
     # initialize trainer
     trainer = pl.Trainer(accelerator=cfg.accelerator, devices=1, max_epochs=1, logger=False)
-
+    
     # start inference
     trainer.test(model=model, dataloaders=test_loader)
-
+    
 
 
 def render(inference_dir_root, vertices, render_output_dir):
