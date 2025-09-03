@@ -56,7 +56,7 @@ class GeometryPartDataset(Dataset):
 
     def _read_data(self, data_fn):
         """Filter out invalid number of parts."""
-        print(os.path.join(self.data_dir, data_fn))
+        #print(os.path.join(self.data_dir, data_fn))
         with open(os.path.join(self.data_dir, data_fn), 'r') as f:
             mesh_list = [line.strip() for line in f.readlines()]
             if self.category:
@@ -65,11 +65,11 @@ class GeometryPartDataset(Dataset):
                     if self.category in line.split('/')
                 ]
         data_list = []
-        print("-------------------------------------")
-        #print('dataset',mesh_list)
+        #print("-------------------------------------")
+        print('dataset',mesh_list[:10])
         for mesh in mesh_list:
             mesh_dir = os.path.join(self.data_dir, mesh)
-            print(mesh_dir)
+            #print(mesh_dir)
             if not os.path.isdir(mesh_dir):
                 print(f'{mesh} does not exist')
                 continue
@@ -78,7 +78,7 @@ class GeometryPartDataset(Dataset):
             
             for frac in fracs:
                 # we take both fractures and modes for training
-                print('frac',fracs)
+                #print('frac',fracs)
                 if 'fractured' not in frac and 'mode' not in frac:
                     continue
                 #print('frac',frac)
@@ -198,6 +198,7 @@ class GeometryPartDataset(Dataset):
             for mesh_file in mesh_files
         ]
         '''
+        
         meshes = []
         for mesh_file in mesh_files:
             _glb = trimesh.load(os.path.join(data_folder, mesh_file))

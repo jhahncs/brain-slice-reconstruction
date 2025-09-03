@@ -25,7 +25,7 @@ def main(cfg):
             part_valids = data_dict['part_valids'][0]
             num_parts = data_dict['num_parts'][0].item()
             mesh_file_path = data_dict['mesh_file_path'][0]
-            print(mesh_file_path)
+            #print(mesh_file_path)
             graph = data_dict['graph'][0]
             category = data_dict['category'][0]
             part_pcs_gt = data_dict['part_pcs_gt'][0]
@@ -50,3 +50,4 @@ def main(cfg):
 # python generate_pc_data.py +data.save_pc_data_path=pc_data/everyday
 if __name__ == '__main__':
     main()
+    print("=========== generate pc DONE ============")

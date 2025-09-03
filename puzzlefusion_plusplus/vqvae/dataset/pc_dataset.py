@@ -77,7 +77,7 @@ class GeometryPartDataset(Dataset):
 
         self.max_num_part = cfg.data.max_num_part
         self.min_num_part = cfg.data.min_num_part
-
+        self.rotation_1d = True
         if overfit != -1: 
             self.data_files = self.data_files[:overfit] 
         
@@ -136,7 +136,7 @@ class GeometryPartDataset(Dataset):
         return pc.cpu().numpy(), quat_gt.cpu().numpy()
 
     @staticmethod
-    def _rotate_pc_backup(pc):
+    def _rotate_pc_xyz(pc):
         """pc: [N, 3]"""
         rot_mat = R.random().as_matrix()
         pc = (rot_mat @ pc.T).T
@@ -170,7 +170,10 @@ class GeometryPartDataset(Dataset):
         for i in range(num_parts):
             pc = pcs[i]
             pc, _ = self._recenter_pc(pc)
-            pc, _ = self._rotate_pc(pc, self.device)
+            if self.rotation_1d:
+                pc, _ = self._rotate_pc(pc, self.device)
+            else:
+                pc, _ = self._rotate_pc_xyz(pc)
             cur_pts.append(pc)
             
         cur_pts = self._pad_data(np.stack(cur_pts, axis=0))  # [P, N, 3]

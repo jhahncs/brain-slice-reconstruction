@@ -42,7 +42,7 @@ class AutoAgglomerative(pl.LightningModule):
         self.encoder = VQVAE(cfg.ae)
         
         self.save_hyperparameters()
-
+        self.rotation_1d = True
         self.noise_scheduler = PiecewiseScheduler(
             num_train_timesteps=cfg.denoiser.model.DDPM_TRAIN_STEPS,
             beta_schedule=cfg.denoiser.model.DDPM_BETA_SCHEDULE,
@@ -105,13 +105,13 @@ class AutoAgglomerative(pl.LightningModule):
 
         noisy_trans_and_rots[ref_part] = reference_gt_and_rots[ref_part]
 
-
-        reference_gt_and_rots[...,4] = torch.repeat_interleave(torch.Tensor([0]), reference_gt_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
-        reference_gt_and_rots[...,5] = torch.repeat_interleave(torch.Tensor([1]), reference_gt_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
-        reference_gt_and_rots[...,6] = torch.repeat_interleave(torch.Tensor([0]), reference_gt_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
-        noisy_trans_and_rots[...,4] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
-        noisy_trans_and_rots[...,5] = torch.repeat_interleave(torch.Tensor([1]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
-        noisy_trans_and_rots[...,6] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+        if self.rotation_1d:
+            reference_gt_and_rots[...,4] = torch.repeat_interleave(torch.Tensor([0]), reference_gt_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+            reference_gt_and_rots[...,5] = torch.repeat_interleave(torch.Tensor([1]), reference_gt_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+            reference_gt_and_rots[...,6] = torch.repeat_interleave(torch.Tensor([0]), reference_gt_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+            noisy_trans_and_rots[...,4] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+            noisy_trans_and_rots[...,5] = torch.repeat_interleave(torch.Tensor([1]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+            noisy_trans_and_rots[...,6] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
 
 
 
@@ -132,16 +132,17 @@ class AutoAgglomerative(pl.LightningModule):
                 part_scale,
                 ref_part
             )
-
-            pred_noise[...,4] = torch.repeat_interleave(torch.Tensor([0]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)
-            pred_noise[...,5] = torch.repeat_interleave(torch.Tensor([1]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)
-            pred_noise[...,6] = torch.repeat_interleave(torch.Tensor([0]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)
+            if self.rotation_1d:
+                pred_noise[...,4] = torch.repeat_interleave(torch.Tensor([0]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)
+                pred_noise[...,5] = torch.repeat_interleave(torch.Tensor([1]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)
+                pred_noise[...,6] = torch.repeat_interleave(torch.Tensor([0]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)
 
             noisy_trans_and_rots = self.noise_scheduler.step(pred_noise, t, noisy_trans_and_rots).prev_sample
             noisy_trans_and_rots[ref_part] = reference_gt_and_rots[ref_part]  
-            noisy_trans_and_rots[...,4] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
-            noisy_trans_and_rots[...,5] = torch.repeat_interleave(torch.Tensor([1]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
-            noisy_trans_and_rots[...,6] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+            if self.rotation_1d:
+                noisy_trans_and_rots[...,4] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+                noisy_trans_and_rots[...,5] = torch.repeat_interleave(torch.Tensor([1]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+                noisy_trans_and_rots[...,6] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
 
             all_pred_trans_rots.append(noisy_trans_and_rots.detach().cpu().numpy())
             
@@ -187,15 +188,15 @@ class AutoAgglomerative(pl.LightningModule):
         reference_gt_and_rots[ref_part] = gt_trans_and_rots[ref_part]
         noisy_trans_and_rots[ref_part] = reference_gt_and_rots[ref_part]
 
+        if self.rotation_1d:
+            reference_gt_and_rots[...,4] = torch.repeat_interleave(torch.Tensor([0]), reference_gt_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+            reference_gt_and_rots[...,5] = torch.repeat_interleave(torch.Tensor([1]), reference_gt_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+            reference_gt_and_rots[...,6] = torch.repeat_interleave(torch.Tensor([0]), reference_gt_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
 
-        reference_gt_and_rots[...,4] = torch.repeat_interleave(torch.Tensor([0]), reference_gt_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
-        reference_gt_and_rots[...,5] = torch.repeat_interleave(torch.Tensor([1]), reference_gt_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
-        reference_gt_and_rots[...,6] = torch.repeat_interleave(torch.Tensor([0]), reference_gt_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
-
-
-        noisy_trans_and_rots[...,4] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
-        noisy_trans_and_rots[...,5] = torch.repeat_interleave(torch.Tensor([1]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
-        noisy_trans_and_rots[...,6] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+        if self.rotation_1d:
+            noisy_trans_and_rots[...,4] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+            noisy_trans_and_rots[...,5] = torch.repeat_interleave(torch.Tensor([1]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+            noisy_trans_and_rots[...,6] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
 
         part_valids = data_dict['part_valids'].clone()
         part_scale = data_dict["part_scale"].clone()

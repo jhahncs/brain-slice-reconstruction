@@ -121,12 +121,12 @@ def _gen_pc_data(cfg, loader, data_type):
 
 
 
-def tiff_2_obj(cfg, tiff_dir_root, tickness,  obj_dir_root, pc_dir_root, num_of_missing_slices, no_gap_between_slices):
+def tiff_2_obj(cfg, tiff_dir_root, tickness,  obj_dir_root, pc_dir_root, num_of_missing_slices, no_gap_between_slices, is_curvature):
         
 
 #( args.tiff_dir_root, data_ids, tickness, num_of_missing_slices,  args.obj_dir_root, no_gap_between_slices, from_index, to_index, max_num_of_slices)
     obj_dir_list_relative = obj_2_pcd.tiff_2_obj_parallel(tiff_dir_root, None, tickness, num_of_missing_slices, 
-                                                          obj_dir_root, no_gap_between_slices)
+                                                          obj_dir_root, no_gap_between_slices = no_gap_between_slices, is_curvature = is_curvature)
     
 
     with open(obj_dir_root+"/test.txt",'w') as f:

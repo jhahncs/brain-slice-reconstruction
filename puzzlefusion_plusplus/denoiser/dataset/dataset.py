@@ -66,7 +66,7 @@ class GeometryLatentDataset(Dataset):
         self.noise_scheduler = PiecewiseScheduler()
         self.max_num_part = self.cfg.data.max_num_part
         self.denoiser_only_flag = denoiser_only_flag
-
+        self.rotation_1d = True
         if overfit != -1:
             self.data_files = self.data_files[:overfit] 
 
@@ -162,7 +162,7 @@ class GeometryLatentDataset(Dataset):
         pc = pc - centroid[None]
         return pc, centroid
     
-    def _rotate_pc_backup(self, pc):
+    def _rotate_pc_xyz(self, pc):
         """
         pc: [N, 3]
         """
@@ -179,6 +179,7 @@ class GeometryLatentDataset(Dataset):
     @staticmethod
     def _rotate_pc(pc):
         """pc: [N, 3]"""
+        
         pc = torch.from_numpy(pc).float()
 
         _mean = torch.mean(pc, axis=0)
@@ -195,6 +196,18 @@ class GeometryLatentDataset(Dataset):
         return pc.cpu().numpy(), quat_gt.cpu().numpy()
 
 
+    def _rotate_whole_part_xyz(self, pc):
+        """
+        pc: [P, N, 3]
+        """
+        P, N, _ = pc.shape
+        pc = pc.reshape(-1, 3)
+        rot_mat = R.random().as_matrix()
+        pc = (rot_mat @ pc.T).T
+        quat_gt = R.from_matrix(rot_mat.T).as_quat()
+        # we use scalar-first quaternion
+        quat_gt = quat_gt[[3, 0, 1, 2]]
+        return pc.reshape(P, N, 3), quat_gt
     
     def _rotate_whole_part(self, pc):
         """
@@ -247,8 +260,10 @@ class GeometryLatentDataset(Dataset):
         part_pcs_gt = data_dict['part_pcs_gt']
         
         ref_part = data_dict['ref_part']
-        
-        part_pcs_final, pose_gt_r = self._rotate_whole_part(part_pcs_gt)
+        if self.rotation_1d:
+            part_pcs_final, pose_gt_r = self._rotate_whole_part(part_pcs_gt)
+        else:
+            part_pcs_final, pose_gt_r = self._rotate_whole_part_xyz(part_pcs_gt)
         part_pcs_final, pose_gt_t = self._recenter_ref(part_pcs_final, ref_part)
         
         cur_pts, cur_quat, cur_trans = [], [], []
@@ -256,7 +271,10 @@ class GeometryLatentDataset(Dataset):
         for i in range(num_parts):
             pc = part_pcs_final[i]
             pc, gt_trans = self._recenter_pc(pc)
-            pc, gt_quat = self._rotate_pc(pc)
+            if self.rotation_1d:
+                pc, gt_quat = self._rotate_pc(pc)
+            else:
+                pc, gt_quat = self._rotate_pc_xyz(pc)
             #print(i,gt_quat )
             cur_quat.append(gt_quat)
             cur_trans.append(gt_trans)
@@ -344,18 +362,19 @@ class GeometryLatentDataset(Dataset):
         noise_rots = torch.randn(part_rots_ref.shape)
         timesteps = torch.randint(0, 50, (1,)).long()
         
-        noise_rots[...,1] = torch.repeat_interleave(torch.Tensor([0]), noise_rots.shape[-2], dim=0).unsqueeze(dim=0)
-        noise_rots[...,2] = torch.repeat_interleave(torch.Tensor([1]), noise_rots.shape[-2], dim=0).unsqueeze(dim=0)
-        noise_rots[...,3] = torch.repeat_interleave(torch.Tensor([0]), noise_rots.shape[-2], dim=0).unsqueeze(dim=0)
+        if self.rotation_1d:
+            noise_rots[...,1] = torch.repeat_interleave(torch.Tensor([0]), noise_rots.shape[-2], dim=0).unsqueeze(dim=0)
+            noise_rots[...,2] = torch.repeat_interleave(torch.Tensor([1]), noise_rots.shape[-2], dim=0).unsqueeze(dim=0)
+            noise_rots[...,3] = torch.repeat_interleave(torch.Tensor([0]), noise_rots.shape[-2], dim=0).unsqueeze(dim=0)
 
 
         part_trans_ref = self.noise_scheduler.add_noise(torch.tensor(part_trans_ref), noise_trans, timesteps).numpy()
         part_rots_ref = self.noise_scheduler.add_noise(torch.tensor(part_rots_ref), noise_rots, timesteps).numpy()
 
-
-        part_rots_ref[...,1] = torch.repeat_interleave(torch.Tensor([0]), part_rots_ref.shape[-2], dim=0).unsqueeze(dim=0)
-        part_rots_ref[...,2] = torch.repeat_interleave(torch.Tensor([1]), part_rots_ref.shape[-2], dim=0).unsqueeze(dim=0)
-        part_rots_ref[...,3] = torch.repeat_interleave(torch.Tensor([0]), part_rots_ref.shape[-2], dim=0).unsqueeze(dim=0)
+        if self.rotation_1d:
+            part_rots_ref[...,1] = torch.repeat_interleave(torch.Tensor([0]), part_rots_ref.shape[-2], dim=0).unsqueeze(dim=0)
+            part_rots_ref[...,2] = torch.repeat_interleave(torch.Tensor([1]), part_rots_ref.shape[-2], dim=0).unsqueeze(dim=0)
+            part_rots_ref[...,3] = torch.repeat_interleave(torch.Tensor([0]), part_rots_ref.shape[-2], dim=0).unsqueeze(dim=0)
 
         data_dict['part_trans'][sample_ref_parts] = part_trans_ref
         data_dict['part_rots'][sample_ref_parts] = part_rots_ref
