@@ -13,6 +13,8 @@ import imageio.v2 as iio
 import pytorch3d
 from pytorch3d.structures import Meshes
 import pytorch3d.utils
+from PIL import Image, ImageDraw, ImageFont
+from chamferdist import ChamferDistance
 from pytorch3d.renderer import (
     FoVPerspectiveCameras,
     PointLights,
@@ -104,8 +106,8 @@ def get_vertices(inference_result_dir, objs_dir, device = None, max_points = 100
         max_list.append(torch.max(vertices,axis=0)[0].cpu().numpy())
 
     #print(np.min(min_list,axis=0),np.max(max_list,axis=0))
-    _min = np.min(min_list,axis=0)
-    _max = np.max(max_list,axis=0)
+    #_min = np.min(min_list,axis=0)
+    #_max = np.max(max_list,axis=0)
     
     #xlim = (float(_min[0]),  float(_max[0]))
     #ylim = (float(_min[1]), float(_max[1]))
@@ -113,7 +115,8 @@ def get_vertices(inference_result_dir, objs_dir, device = None, max_points = 100
     #print(xlim, ylim, zlim)
     #print(type(_max[0]))
 
-    return vertice_list
+    obj_id_list = [o.split("/")[-1].split(".")[0] for o in obj_file_list]
+    return vertice_list, obj_id_list
 
 def sum_arrays(total):
 
@@ -309,7 +312,7 @@ def pcd_list_2_img(device,
     img_data_list_init_front = []
     img_data_list_init_gt = []
     img_data_list_init_gt_front = []
-    for _i, vertices in enumerate(tqdm(vertice_list)):
+    for _i, vertices in enumerate(tqdm(vertice_list, desc='gen snapshot images')):
         #print(pcd_file_name)
         #vertices = vertices.cpu()
         translated_points = vertices.to(device).to(torch.float)
@@ -360,7 +363,7 @@ def pcd_list_2_img(device,
     imageio.mimsave(output_img_file_name_init_gt, [sum_arrays(img_data_list_init_gt)], format='PNG')
     imageio.mimsave(output_img_file_name_init_gt_front, [sum_arrays(img_data_list_init_gt_front)], format='PNG')
 
-def gt_img(device, vertice_list, inference_result_dir, output_dir):
+def gt_img(device, vertice_list, inference_result_dir, output_dir, obj_id_list):
 
     data_id = inference_result_dir.split("/")[-1]
     os.makedirs(f'{output_dir}/{data_id}',exist_ok=True)
@@ -386,6 +389,7 @@ def plot_pointcloud2(
     device,
     output_dir,
     vertices_list,
+    obj_id_list,
     init_pose, gt,
     predict_0,
     alpha=.8,
@@ -398,7 +402,7 @@ def plot_pointcloud2(
     """Plot a pointcloud tensor of shape (N, coordinates)
     """
 
-
+   
 
 
     renderer, renderer_front = get_renderer(device)
@@ -406,12 +410,14 @@ def plot_pointcloud2(
 
     os.makedirs(output_dir+"/iteration/data", exist_ok = True)
 
+    os.makedirs(output_dir+"/trans_diff", exist_ok = True)
+
     os.makedirs(output_dir+"/trans", exist_ok = True)
     os.makedirs(output_dir+"/init_gt", exist_ok = True)
     #fig = plt.figure(figsize=(25,20))
     #predict_0[:,:,5:] = np.zeros((predict_0.shape[0],predict_0.shape[1],2))
     #predict_0[:,:,4:5] = np.ones((predict_0.shape[0],predict_0.shape[1],1))
-    for _s  in range(predict_0.shape[0]):
+    for _s  in tqdm(range(predict_0.shape[0]), desc='gen pngs'):
             
 
         #ax = fig.add_subplot(4, 5, _s+1)
@@ -420,6 +426,10 @@ def plot_pointcloud2(
         images = []
         image_data_list = []
         images_front = []
+        image_index_2_dice_score = {}
+        image_index_2_text = {}
+        image_index_2_color = {}
+        translated_points_pre = None
         for _i, vertices  in enumerate(vertices_list):
 
             
@@ -431,9 +441,22 @@ def plot_pointcloud2(
             
             #tr = Translate(torch.FloatTensor([-gt[_i,:3]]))
             #rr = Rotate(quaternion_to_matrix(torch.FloatTensor([-gt[_i,3:]])))
-            translated_points, _ = transform_pc(device, vertices, init_pose, gt,predict_0, _s, _i)
+            translated_points, _ = transform_pc(device, vertices, init_pose, gt, predict_0, _s, _i)
 
-            if _s == predict_0.shape[0]-1:
+            if _i >= 1:
+                
+                shape_cd_min = calculate_dice_score_from_point_clouds((translated_points_pre - torch.mean(translated_points_pre, axis=0)).cpu().numpy(),
+                (translated_points - torch.mean(translated_points, axis=0)).cpu().numpy() )
+                image_index_2_dice_score[_i] = shape_cd_min
+
+            translated_points_pre = translated_points
+
+            if _s == 19: # the last iteration
+                with open(f'{output_dir}/trans_diff/{_i}.obj', 'w') as outfile:
+                    for _arr in translated_points.cpu().numpy():
+                        outfile.write(f'v {_arr[0]} {_arr[1]} {_arr[2]}\n')
+
+            if _s == predict_0.shape[0]-1: # the last iteration
 
                 translated_points_init_gt, _ = transform_pc(device, vertices, init_pose, gt, None, _s, _i)
                 with open(f'{output_dir}/init_gt/{_i}.obj', 'w') as outfile:
@@ -444,12 +467,19 @@ def plot_pointcloud2(
                     for _arr in translated_points.cpu().numpy():
                         outfile.write(f'v {_arr[0]} {_arr[1]} {_arr[2]}\n')
 
-                print(f'{output_dir}/trans/{_i}.obj')
-                
+                #print(f'{output_dir}/trans/{_i}.obj')
+            #print("--------------")
+            #print(torch.min(translated_points,axis=0)[0][1])
+            #print(torch.min(translated_points,axis=1))
+            #print(torch.min(translated_points,axis=0)[0][1].item())
+            image_index_2_text[_i] = torch.min(translated_points,axis=0)[0][1].item()
+            #print(_s, _i, torch.min(translated_points,axis=0))
             #print(torch.max(translated_points,axis=0)[0])
             #print(torch.min(translated_points,axis=0)[0])
             #translated_points = vertices.to(device)
             colors = torch.ones_like(translated_points) * torch.tensor(tab10_r.colors[_i%20][:3]).to(device)  # blue points
+            image_index_2_color[_i] = tab10_r.colors[_i%20][:3]
+            
             point_cloud = pytorch3d.structures.Pointclouds(points=[translated_points], features=[colors.to(torch.float)])
             image_data_list.append(translated_points.cpu().numpy())
             images.append((renderer(point_cloud).cpu().numpy()*255).astype(np.uint8))
@@ -464,11 +494,35 @@ def plot_pointcloud2(
         
         imageio.mimsave(f'{output_dir}/iteration/{_s}.png', [images_[0]], format='PNG')
         imageio.mimsave(f'{output_dir}/iteration/{_s}_front.png', [images_front[0]], format='PNG')
+
+        sorted_image_index_2_text = sorted(image_index_2_text.items(), key=lambda item: item[1] ,reverse=True)
+        
+        slice_pos_text = []
+        slice_pos_text.append(f'iteration {_s}')
+        slice_pos_text.append(f'id : y : dice')
+        for imaage_id, text in sorted_image_index_2_text:
+
+            if _s > 19 and imaage_id >= 1:                
+                if _s - 19 >= imaage_id:
+                    slice_pos_text.append(f'{obj_id_list[imaage_id]} : {text:.3f} : {image_index_2_dice_score[imaage_id]:.3f} **')
+                else:
+                    slice_pos_text.append(f'{obj_id_list[imaage_id]} : {text:.3f} : {image_index_2_dice_score[imaage_id]:.3f} ')
+            else:
+                slice_pos_text.append(f'{obj_id_list[imaage_id]} : {text:.3f}')
+            
+        add_text_to_png(f'{output_dir}/iteration/{_s}.png', slice_pos_text, f'{output_dir}/iteration/{_s}.png')
+        add_text_to_png(f'{output_dir}/iteration/{_s}_front.png', slice_pos_text, f'{output_dir}/iteration/{_s}_front.png')
         #ax.imshow(images_[0, ..., :3])
 
+
+
+
+
     #plt.show(fig)
+    _last_obj_flies  = glob.glob(f'{output_dir}/trans_diff/{"*"}.obj')
+    slice_util.combine_obj_files(_last_obj_flies,f'{output_dir}/combined_diff.obj')
     _last_obj_flies  = glob.glob(f'{output_dir}/trans/{"*"}.obj')
-    slice_util.combine_obj_files(_last_obj_flies,f'{output_dir}/combined.obj')
+    slice_util.combine_obj_files(_last_obj_flies,f'{output_dir}/combined_diff_rotate.obj')
 
     w = iio.get_writer(f'{output_dir}/video.mp4', format='FFMPEG', mode='I', fps=2,
                         #codec='h264_vaapi',
@@ -490,6 +544,48 @@ def plot_pointcloud2(
     w.close()
 
 
+def add_text_to_png(image_path, text_lines, output_path):
+    """
+    PNG 이미지에 여러 줄의 텍스트를 추가하는 함수입니다.
+
+    :param image_path: 텍스트를 추가할 PNG 이미지 파일의 경로
+    :param text_lines: 이미지에 추가할 텍스트 리스트
+    :param output_path: 텍스트가 추가된 이미지를 저장할 경로
+    """
+    try:
+        # 이미지 열기
+        img = Image.open(image_path).convert("RGBA")
+        draw = ImageDraw.Draw(img)
+
+        # 사용할 폰트와 크기 설정
+        font_size = 30
+        try:
+            font = ImageFont.truetype("Arial.ttf", font_size)
+        except IOError:
+            #print("Arial.ttf 폰트를 찾을 수 없습니다. 기본 폰트를 사용합니다.")
+            font = ImageFont.load_default()
+
+        # 텍스트를 그릴 시작 위치 (왼쪽 상단에 약간의 여백 추가)
+        margin = 20
+        y_position = margin
+
+        for line in text_lines:
+            # 현재 줄의 텍스트 크기 계산 (textsize() 대신 textbbox() 사용)
+            bbox = draw.textbbox((0, 0), line, font=font)
+            text_height = bbox[3] - bbox[1]
+
+            # 이미지에 텍스트 그리기
+            draw.text((margin, y_position), line, font=font, fill=(255, 255, 255, 255))
+
+            # 다음 줄을 위해 y_position 업데이트
+            y_position += text_height + 10 # 줄 간격 10픽셀 추가
+
+        # 결과 이미지 저장
+        img.save(output_path, "PNG")
+        #print(f"텍스트가 성공적으로 추가되어 {output_path}에 저장되었습니다.")
+
+    except Exception as e:
+        print(f"오류가 발생했습니다: {e}")
 
 def gen_final_image(device, vertice_list,  df_trasformation, final_image_output_dir):
 
@@ -529,8 +625,87 @@ def gen_final_image(device, vertice_list,  df_trasformation, final_image_output_
     imageio.mimsave(final_image_output_dir+"/0/final.png", [sum_arrays(img_data_list_original)], format='PNG')
     imageio.mimsave(final_image_output_dir+"/0/final_front.png", [sum_arrays(img_data_list_original_front)], format='PNG')
     return np.array(img_data_list_original_data)
+def calculate_dice_score_from_point_clouds(pc1: np.ndarray, pc2: np.ndarray, resolution: int = 64) -> float:
+    """
+    Calculates the Dice score between two point clouds using voxelization.
 
-def make_video(device, verts_list, inference_dir, output_dir):
+    Args:
+        pc1 (np.ndarray): The first point cloud, shape (N, 3).
+        pc2 (np.ndarray): The second point cloud, shape (M, 3).
+        resolution (int): The resolution of the 3D voxel grid.
+
+    Returns:
+        float: The Dice score (0.0 to 1.0).
+    """
+
+    # 1. Normalize point clouds to fit within a [0, 1] cube
+    combined_pc = np.concatenate([pc1, pc2], axis=0)
+    min_coords = np.min(combined_pc, axis=0)
+    max_coords = np.max(combined_pc, axis=0)
+    
+    # Handle the case of zero-size point clouds or flat point clouds
+    if np.all(min_coords == max_coords):
+        if pc1.shape[0] > 0 and pc2.shape[0] > 0:
+            return 1.0 # Both are single points at the same location
+        return 0.0 # One or both are empty
+    
+    scale = max_coords - min_coords
+    
+    
+    pc1_norm = (pc1 - min_coords) / scale
+    pc2_norm = (pc2 - min_coords) / scale
+
+    # 2. Voxelize the point clouds
+    # Get voxel indices for each point
+    voxel_coords1 = np.floor(pc1_norm * (resolution - 1)).astype(int)
+    voxel_coords2 = np.floor(pc2_norm * (resolution - 1)).astype(int)
+    #print(voxel_coords1)
+    #print(voxel_coords2)
+    # Convert coordinates to a single index for a flat array
+    voxel_indices1 = (voxel_coords1[:, 0] * resolution * resolution) + (voxel_coords1[:, 1] * resolution) + voxel_coords1[:, 2]
+    voxel_indices2 = (voxel_coords2[:, 0] * resolution * resolution) + (voxel_coords2[:, 1] * resolution) + voxel_coords2[:, 2]
+
+    # Create binary voxel sets
+    voxel_set1 = set(voxel_indices1)
+    voxel_set2 = set(voxel_indices2)
+
+    # 3. Calculate intersection and union
+    intersection_size = len(voxel_set1.intersection(voxel_set2))
+    total_size = len(voxel_set1) + len(voxel_set2)
+    #print('intersection_size',intersection_size)
+    # 4. Calculate Dice score
+    dice_score = (2.0 * intersection_size) / total_size if total_size > 0 else 0.0
+    
+    return dice_score
+
+
+def get_y_rotation_angle_360(q) -> float:
+    """
+    (w, 0, 1, 0) 형식의 쿼터니언에서 Y축 회전 각도를 360도 형식으로 계산합니다.
+
+    Args:
+        q (tuple or list): (w, x, y, z) 형식의 쿼터니언.
+
+    Returns:
+        float: Y축 회전각 (0 ~ 360도).
+    """
+    w, _, y, _ = q
+    
+    # 쿼터니언의 벡터 부분이 정규화되지 않았을 수 있으므로 y 성분만 사용
+    # atan2(y, x) -> atan2(sin(theta/2), cos(theta/2))
+    angle_rad = 2 * np.arctan2(y, w)
+    
+    # 라디안을 도로 변환
+    angle_deg = np.degrees(angle_rad)
+
+    # 각도를 0 ~ 360도 범위로 정규화
+    normalized_angle = angle_deg % 360
+    if normalized_angle < 0:
+        normalized_angle += 360
+        
+    return normalized_angle
+
+def make_video(device, verts_list, inference_dir, output_dir, obj_id_list):
     
         
     data_id = inference_dir.rsplit("/",1)[1]
@@ -544,17 +719,99 @@ def make_video(device, verts_list, inference_dir, output_dir):
     predict_file_name = glob.glob(f'{inference_dir}/predict*')[0]
     predict_0 = np.load(predict_file_name)
     
+
+
+    #predict_last = predict_0.copy()
+    predict_last = np.zeros((1,predict_0.shape[1],predict_0.shape[2]))
+    print('predict_0',predict_0.shape) # [20, 18, 7]
+    metric = ChamferDistance()
+    last_step_index = predict_0.shape[0]-1
+    #pts_list = []
+    for _i, vertices  in tqdm(enumerate(verts_list),desc='rotate by dice score'):
+        translated_points_cur, _ = transform_pc(device, vertices, init_pose, gt, predict_0, last_step_index, _i)
+        #print(torch.max(translated_points_cur, axis=0)[0][1], torch.min(translated_points_cur, axis=0)[0][1])
+        if _i >= 1:
+
+            y_rotation_min = 0
+            y_rotation = 1
+            _iter = 0
+            
+            shape_cd_min_init = shape_cd_min = calculate_dice_score_from_point_clouds((translated_points_pre - torch.mean(translated_points_pre, axis=0)).cpu().numpy(),
+            (translated_points_cur - torch.mean(translated_points_cur, axis=0)).cpu().numpy() )
+            '''
+            shape_cd_min = metric(
+                translated_points_pre.unsqueeze(0), 
+                translated_points_cur.unsqueeze(0), 
+                bidirectional=False, 
+                point_reduction='mean', 
+                batch_reduction=None
+            ).item()
+            '''
+            translated_points_cur_min = translated_points_cur
+            #print(_i, _iter, shape_cd_min)
+            while _iter <= 360:
+                #y_rotation = torch.rand(1)
+                translated_points_cur_rotated, quat_gt = slice_util._rotate_pc_y(translated_points_cur, y_rotation, device)
+                #print(torch.max(translated_points_cur_rotated, axis=0)[0][1], torch.min(translated_points_cur_rotated, axis=0)[0][1])
+                #print(translated_points_cur_rotated.shape)
+                '''
+                shape_cd = metric(
+                    translated_points_pre.unsqueeze(0), 
+                    translated_points_cur_rotated.unsqueeze(0), 
+                    bidirectional=False, 
+                    point_reduction='mean', 
+                    batch_reduction=None
+                ).item()
+                '''
+                shape_cd = calculate_dice_score_from_point_clouds((translated_points_pre - torch.mean(translated_points_pre, axis=0)).cpu().numpy(),
+                        (translated_points_cur_rotated - torch.mean(translated_points_cur_rotated, axis=0)).cpu().numpy() )
+                
+                #print(_i, _iter, shape_cd, y_rotation,get_y_rotation_angle_360(quat_gt))
+                if shape_cd_min < shape_cd:
+                    y_rotation_min = y_rotation
+                    
+                    #print(shape_cd, y_rotation_min.shape, y_rotation)
+                    translated_points_cur_min = translated_points_cur_rotated
+                    shape_cd_min = shape_cd
+
+                    new_trans_rotate = predict_0[predict_0.shape[0]-1,_i,:].copy()
+                    new_trans_rotate[3:] = quat_gt
+                    predict_last[0,_i,:] = new_trans_rotate
+
+                    #predict_last = np.insert(predict_last, predict_0.shape[0], new_element)
+                else:
+                    y_rotation += 1
+                _iter += 1
+            print(f'{_i}, {shape_cd_min_init:.3f}, {shape_cd_min:.3f}, {y_rotation_min}')
+            translated_points_pre = translated_points_cur_min
+            
+        else:
+            predict_last[0,_i,:] = predict_0[predict_0.shape[0]-1,_i,:]
+            translated_points_pre = translated_points_cur
+            
+        
+        #pts_list.append(translated_points_pre  
     #print(predict_0.shape)
 
-#/data/jhahn/data/shape_dataset/data/mouse_brain_50mm/50_tickness_20_sllices_test/fractured_0
+    #/data/jhahn/data/shape_dataset/data/mouse_brain_50mm/50_tickness_20_sllices_test/fractured_0
 
     #mesh_file_dir = '/data/jhahn/data/shape_dataset/data/mouse_brain_50mm/50_tickness_20_sllices_test/fractured_0/'
 
     #verts_list = get_vertices(mesh_file_dir, device)
+    predict_alg = np.zeros((predict_0.shape[1],predict_0.shape[1],predict_0.shape[2]))
+    for _alg_step  in range(len(verts_list)):
+        predict_alg[_alg_step,:,:] = predict_0[predict_0.shape[0]-1,:,:]
+        predict_alg[_alg_step, :_alg_step+1, :] = predict_last[0,:_alg_step+1,:]
 
+        
     #plot_pointcloud2(verts,xlim=(0, 1), ylim=(0, 0.9), zlim=(0, 1))
     os.makedirs(f'{output_dir}/{data_id}', exist_ok=True)
-    plot_pointcloud2(device, f'{output_dir}/{data_id}',verts_list, init_pose, gt, predict_0, xlim=(-2, 2), ylim=(-2, 2), zlim=(-2, 2))
+    #plot_pointcloud2(device, f'{output_dir}/{data_id}',verts_list, obj_id_list, init_pose, gt, predict_0, xlim=(-2, 2), ylim=(-2, 2), zlim=(-2, 2))
+    
+    predict_rotated = np.concatenate((predict_0, predict_alg), axis=0)
+    #print(predict_last)
+
+    plot_pointcloud2(device, f'{output_dir}/{data_id}',verts_list, obj_id_list, init_pose, gt, predict_rotated, xlim=(-2, 2), ylim=(-2, 2), zlim=(-2, 2))
 
 
 

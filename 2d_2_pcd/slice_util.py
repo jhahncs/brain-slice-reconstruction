@@ -45,6 +45,41 @@ from pytorch3d.renderer import (
     NormWeightedCompositor
 )
 
+def _rotate_pc_y(pc, angle, device):
+    """pc: [N, 3]"""
+    if isinstance(pc, np.ndarray):
+        pc = torch.from_numpy(pc).float()
+    pc = pc.to(device)
+    _mean = torch.mean(pc, axis=0)
+    tr = Translate(-_mean[0],-_mean[1],-_mean[2], dtype=torch.float32, device = device)
+    tr_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32, device = device)
+
+    
+
+  
+    # 1. Convert the angle to radians and halve it
+    angle_radians = np.radians(angle)
+    half_angle = angle_radians / 2.0
+    
+    # 2. Calculate the scalar and vector parts
+    w = np.cos(half_angle)
+    x = 0.0 * np.sin(half_angle) # x-component of the axis
+    y = 1.0 * np.sin(half_angle) # y-component of the axis
+    z = 0.0 * np.sin(half_angle) # z-component of the axis
+    
+    # 3. Return the quaternion
+    quat_gt = torch.from_numpy(np.array([w, x, y, z]))
+
+
+    #quat_gt = torch.tensor([angle,0,1,0])
+    quat_gt = normalize(quat_gt, p=1.0, dim = 0)
+    rr = Rotate(quaternion_to_matrix(quat_gt), dtype=torch.float32, device = device)
+    t = Transform3d(device = device).compose(tr).compose(rr).compose(tr_r)
+    pc = t.transform_points(pc)#.to(torch.float).to(device)
+    
+    return pc,  quat_gt
+
+
 def load_obj(file_path):
     vertices = []
     faces = []

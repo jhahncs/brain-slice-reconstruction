@@ -228,7 +228,7 @@ def inference(cfg, pc_dir_root, obj_dir_list_relative, ckpt_path, inference_dir_
     
 
 
-def render(inference_dir_root, vertices, render_output_dir):
+def render(inference_dir_root, obj_id_list ,vertices, render_output_dir):
         
     result_dir_list = []
     for f in os.listdir(inference_dir_root):
@@ -240,9 +240,9 @@ def render(inference_dir_root, vertices, render_output_dir):
     _result_dir = result_dir_list[0]
 
     
-    render_inference_result.gt_img(device, vertices, _result_dir, render_output_dir)
+    render_inference_result.gt_img(device, vertices, _result_dir, render_output_dir, obj_id_list)
 
-    render_inference_result.make_video(device, vertices, _result_dir,render_output_dir )
+    render_inference_result.make_video(device, vertices, _result_dir,render_output_dir , obj_id_list)
 from chamferdist import ChamferDistance
 
 def eval(vertices_gt,inference_dir_root, render_output_dir):

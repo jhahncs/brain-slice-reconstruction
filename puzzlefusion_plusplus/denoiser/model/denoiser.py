@@ -140,6 +140,8 @@ class Denoiser(pl.LightningModule):
         part_valids[data_dict["ref_part"]] = False
         mse_loss = F.mse_loss(pred_noise[part_valids], noise[part_valids])
 
+
+
         return {'mse_loss': mse_loss}
 
 
