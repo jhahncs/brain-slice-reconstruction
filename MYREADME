@@ -12,8 +12,10 @@ nohup python batch_slicer.py /data/jhahn/data/brain_lightsheet/stack.tif /data/j
 #nohup python myslicer.py /data/jhahn/data/brain_lightsheet/stack.tif /home/jhahn/puzzlefusion-plusplus/2d_2_pcd/slicer_my_brain &
 
 nohup python obj_2_pcd.py --tiff_dir_root /data/jhahn/data/brain_lightsheet/slices --obj_dir_root /data/jhahn/data/shape_dataset/data/brain_lightsheet &
-nohup python generate_pc_data.py +data.save_pc_data_path=/data/jhahn/data/shape_dataset/pc_data/brain_lightsheet &
+python generate_dataset_split.py --dataname 0.005_15_HIP --obj_dir /data/jhahn/data/shape_dataset/data/brain_lightsheet --datalist_file_dir /data/jhahn/data/shape_dataset/data
 
+nohup python generate_pc_data.py +data.save_pc_data_path=/data/jhahn/data/shape_dataset/pc_data/brain_lightsheet &
+python generate_pc_data.py +data.save_pc_data_path=/data/jhahn/data/shape_dataset/pc_data/${DATASET_NAME}
 
 
 

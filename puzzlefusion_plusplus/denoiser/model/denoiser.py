@@ -14,8 +14,10 @@ from puzzlefusion_plusplus.denoiser.evaluation.evaluator import (
 import numpy as np
 from puzzlefusion_plusplus.denoiser.model.modules.custom_diffusers import PiecewiseScheduler
 from pytorch3d import transforms
-
-
+from puzzlefusion_plusplus.denoiser.evaluation.transform import (
+    transform_pc,
+    quaternion_to_euler,
+)
 class Denoiser(pl.LightningModule):
     def __init__(self, cfg):
         super(Denoiser, self).__init__()
@@ -132,6 +134,61 @@ class Denoiser(pl.LightningModule):
         return output_dict
 
 
+    def calculate_dice_score_from_point_clouds(self, pc1: np.ndarray, pc2: np.ndarray, resolution: int = 64) -> float:
+        """
+        Calculates the Dice score between two point clouds using voxelization.
+
+        Args:
+            pc1 (np.ndarray): The first point cloud, shape (N, 3).
+            pc2 (np.ndarray): The second point cloud, shape (M, 3).
+            resolution (int): The resolution of the 3D voxel grid.
+
+        Returns:
+            float: The Dice score (0.0 to 1.0).
+        """
+
+        # 1. Normalize point clouds to fit within a [0, 1] cube
+        combined_pc = np.concatenate([pc1, pc2], axis=0)
+        min_coords = np.min(combined_pc, axis=0)
+        max_coords = np.max(combined_pc, axis=0)
+        
+        # Handle the case of zero-size point clouds or flat point clouds
+        if np.all(min_coords == max_coords):
+            if pc1.shape[0] > 0 and pc2.shape[0] > 0:
+                return 1.0 # Both are single points at the same location
+            return 0.0 # One or both are empty
+        
+        scale = max_coords - min_coords
+        
+        
+        pc1_norm = (pc1 - min_coords) / scale
+        pc2_norm = (pc2 - min_coords) / scale
+
+        # 2. Voxelize the point clouds
+        # Get voxel indices for each point
+        voxel_coords1 = np.floor(pc1_norm * (resolution - 1)).astype(int)
+        voxel_coords2 = np.floor(pc2_norm * (resolution - 1)).astype(int)
+        #print(voxel_coords1)
+        #print(voxel_coords2)
+        # Convert coordinates to a single index for a flat array
+        voxel_indices1 = (voxel_coords1[:, 0] * resolution * resolution) + (voxel_coords1[:, 1] * resolution) + voxel_coords1[:, 2]
+        voxel_indices2 = (voxel_coords2[:, 0] * resolution * resolution) + (voxel_coords2[:, 1] * resolution) + voxel_coords2[:, 2]
+
+        # Create binary voxel sets
+        voxel_set1 = set(voxel_indices1)
+        voxel_set2 = set(voxel_indices2)
+
+        # 3. Calculate intersection and union
+        intersection_size = len(voxel_set1.intersection(voxel_set2))
+        total_size = len(voxel_set1) + len(voxel_set2)
+        #print('intersection_size',intersection_size)
+        # 4. Calculate Dice score
+        dice_score = (2.0 * intersection_size) / total_size if total_size > 0 else 0.0
+        
+        return dice_score
+
+        
+
     def _loss(self, data_dict, output_dict):
         pred_noise = output_dict['pred_noise']
         part_valids = data_dict['part_valids'].bool()
@@ -141,8 +198,41 @@ class Denoiser(pl.LightningModule):
         mse_loss = F.mse_loss(pred_noise[part_valids], noise[part_valids])
 
 
-
         return {'mse_loss': mse_loss}
+
+        
+        
+        gt_trans = data_dict['part_trans']
+        gt_rots = data_dict['part_rots']
+        gt_trans_and_rots = torch.cat([gt_trans, gt_rots], dim=-1)
+
+
+        part_valids = data_dict['part_valids'].clone()
+        part_scale = data_dict["part_scale"].clone()
+        part_pcs = data_dict["part_pcs"].clone()
+
+
+        pts = data_dict['part_pcs']
+        pred_trans = pred_noise[..., :3]
+        pred_rots = pred_noise[..., 3:]
+
+        expanded_part_scale = data_dict["part_scale"].unsqueeze(-1).expand(-1, -1, 1000, -1)
+        pts = pts * expanded_part_scale
+        '''
+        acc, _, _ = calc_part_acc(pts, trans1=pred_trans, trans2=gt_trans,
+                            rot1=pred_rots, rot2=gt_rots, valids=data_dict['part_valids'], 
+                            chamfer_distance=self.metric)
+        '''
+        shape_cd = calc_shape_cd(pts, trans1=pred_trans, trans2=gt_trans,
+                            rot1=pred_rots, rot2=gt_rots, valids=data_dict['part_valids'], 
+                            chamfer_distance=self.metric)
+
+
+        self.dice_score(pts, trans1=pred_trans, trans2=gt_trans,
+                            rot1=pred_rots, rot2=gt_rots, valids=data_dict['part_valids'], 
+                            chamfer_distance=self.metric)
+        shape_cd_svg = shape_cd.sum(-1) / (len(shape_cd))
+        return {'mse_loss': mse_loss, 'shape_cd_loss': shape_cd_svg}
 
 
     def training_step(self, data_dict, idx):
@@ -168,6 +258,9 @@ class Denoiser(pl.LightningModule):
             self.log(f"val_loss/{loss_name}", loss_value, on_step=False, on_epoch=True)
         self.log(f"val_loss/total_loss", total_loss, on_step=False, on_epoch=True)
                 
+
+
+        
 
     def validation_step(self, data_dict, idx):
         self._calc_val_loss(data_dict)

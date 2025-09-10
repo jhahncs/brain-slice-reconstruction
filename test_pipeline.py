@@ -89,7 +89,7 @@ def init_dir(files_root,data_ids):
 def _gen_pc_data(cfg, loader, data_type):
     save_path = cfg.data.save_pc_data_path
     os.makedirs(save_path, exist_ok=True)
-    print('save_path',save_path)
+    print('_gen_pc_data',save_path)
     for i, data_dict in tqdm(enumerate(loader), total=len(loader), desc=f"Processing {data_type} data"):
         data_id = data_dict['data_id'][0].item()
         part_valids = data_dict['part_valids'][0]
@@ -125,7 +125,7 @@ def tiff_2_obj(cfg, tiff_dir_root, tickness,  obj_dir_root, pc_dir_root, num_of_
         
 
 #( args.tiff_dir_root, data_ids, tickness, num_of_missing_slices,  args.obj_dir_root, no_gap_between_slices, from_index, to_index, max_num_of_slices)
-    obj_dir_list_relative = obj_2_pcd.tiff_2_obj_parallel(tiff_dir_root, None, tickness, num_of_missing_slices, 
+    obj_dir_list_relative = obj_2_pcd.tiff_2_obj_parallel_test_mode(tiff_dir_root, None, tickness, num_of_missing_slices, 
                                                           obj_dir_root, no_gap_between_slices = no_gap_between_slices, is_curvature = is_curvature)
     
 
@@ -215,10 +215,10 @@ def inference(cfg, pc_dir_root, obj_dir_list_relative, ckpt_path, inference_dir_
             if k.startswith('encoder.')}
     )
 
-    if cfg.verifier.max_iters > 1:
+    #if cfg.verifier.max_iters > 1:
         # load verifier weights    
-        verifier_weights = torch.load(cfg.verifier.ckpt_path)['state_dict']
-        model.verifier.load_state_dict({k.replace('verifier.', ''): v for k, v in verifier_weights.items()})
+    #    verifier_weights = torch.load(cfg.verifier.ckpt_path)['state_dict']
+    #    model.verifier.load_state_dict({k.replace('verifier.', ''): v for k, v in verifier_weights.items()})
 
     # initialize trainer
     trainer = pl.Trainer(accelerator=cfg.accelerator, devices=1, max_epochs=1, logger=False)

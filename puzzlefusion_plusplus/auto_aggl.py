@@ -248,6 +248,18 @@ class AutoAgglomerative(pl.LightningModule):
             if iter + 1 == self.cfg.verifier.max_iters:
                 break
 
+
+
+
+
+
+
+
+
+
+
+
+
             pts = part_pcs.clone()
             pred_trans = noisy_trans_and_rots[..., :3]
             pred_rots = noisy_trans_and_rots[..., 3:]

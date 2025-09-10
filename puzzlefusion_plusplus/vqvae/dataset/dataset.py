@@ -56,7 +56,7 @@ class GeometryPartDataset(Dataset):
 
     def _read_data(self, data_fn):
         """Filter out invalid number of parts."""
-        #print(os.path.join(self.data_dir, data_fn))
+        print("dataset: ",os.path.join(self.data_dir, data_fn))
         with open(os.path.join(self.data_dir, data_fn), 'r') as f:
             mesh_list = [line.strip() for line in f.readlines()]
             if self.category:
@@ -66,7 +66,7 @@ class GeometryPartDataset(Dataset):
                 ]
         data_list = []
         #print("-------------------------------------")
-        print('dataset',mesh_list[:10])
+        print(len(mesh_list), mesh_list[:10])
         for mesh in mesh_list:
             mesh_dir = os.path.join(self.data_dir, mesh)
             #print(mesh_dir)
