@@ -92,14 +92,16 @@ class DenoiserTransformer(nn.Module):
             nn.SiLU(),
             nn.Linear(self.model_channels // 2, 3),
         )
-
+        #self.hardtanh = nn.Hardtanh(min_val=-300, max_val=300)
         # mlp out for rotation N, 256 -> N, 4
         self.mlp_out_rot = nn.Sequential(
             nn.Linear(self.model_channels, self.model_channels),
             nn.SiLU(),
             nn.Linear(self.model_channels, self.model_channels // 2),
             nn.SiLU(),
-            nn.Linear(self.model_channels // 2, 4), # jhahn
+            nn.Linear(self.model_channels // 2, 4) ,
+            #nn.Hardtanh(min_val=-300, max_val=300)
+              # jhahn
         )
 
 
@@ -143,6 +145,29 @@ class DenoiserTransformer(nn.Module):
 
         trans = self.mlp_out_trans(out)
         rots = self.mlp_out_rot(out)
+
+        # tanh 함수를 적용하여 출력 범위를 (-1, 1)로 제한
+        #tanh_output = self.tanh(rots)
+        
+        # (-1, 1) 범위의 값을 원하는 범위(-300, 300)로 스케일링
+        #scaled_output = tanh_output * 300
+
+        #print(rots.shape)
+        #print(rots[...,3])
+        #print(rots[...,3].shape)
+        #print('@@',torch.min(rots[...,3], axis=0))
+        y_min = torch.min(torch.min(rots[...,3], axis=0)[0], axis=0)[0]
+        y_max = torch.max(torch.max(rots[...,3], axis=0)[0], axis=0)[0]
+        #print('y_min',y_min)
+        #print('y_max',y_max)
+        # Avoid division by zero if y_max and y_min are equal
+        if y_max != y_min:
+            rots[...,3] = ((rots[...,3] - y_min) / (y_max - y_min))*100
+        else:
+            rots[...,3] = rots[...,3]  # or some default value if all outputs are the same
+
+
+
 
         return torch.cat([trans, rots], dim=-1)
 

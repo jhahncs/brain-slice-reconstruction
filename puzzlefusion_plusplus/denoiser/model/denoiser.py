@@ -11,6 +11,7 @@ from puzzlefusion_plusplus.denoiser.evaluation.evaluator import (
     rot_metrics,
     calc_shape_cd
 )
+import math
 import numpy as np
 from puzzlefusion_plusplus.denoiser.model.modules.custom_diffusers import PiecewiseScheduler
 from pytorch3d import transforms
@@ -120,10 +121,12 @@ class Denoiser(pl.LightningModule):
             data_dict['part_scale'],
             ref_part
         )
+        '''
         if self.rotation_1d:
             pred_noise[...,4] = torch.repeat_interleave(torch.Tensor([0]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)
             pred_noise[...,5] = torch.repeat_interleave(torch.Tensor([1]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)
             pred_noise[...,6] = torch.repeat_interleave(torch.Tensor([0]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)
+        '''
         #pred_noise[ref_part]  = gt_trans_and_rots[ref_part]
 
         output_dict = {
@@ -233,10 +236,142 @@ class Denoiser(pl.LightningModule):
                             chamfer_distance=self.metric)
         shape_cd_svg = shape_cd.sum(-1) / (len(shape_cd))
         return {'mse_loss': mse_loss, 'shape_cd_loss': shape_cd_svg}
+    def get_y_rotation_angle_360(self,w):
+        """
+        (w, 0, 1, 0) 형태의 쿼터니언에서 y축 회전 각도(360도 기준)를 계산합니다.
+        
+        Args:
+            w (float): 쿼터니언의 실수부.
+        
+        Returns:
+            float: 0도에서 360도 사이의 y축 회전 각도.
+        """
+        # w가 0에 매우 가까울 경우 나누기 0 오류를 방지
+        if np.isclose(w, 0):
+            angle_rad = np.pi
+        else:
+            # 회전 각도(라디안) 계산
+            angle_rad = 2 * np.arctan(1.0 / w)
+            
+        # 각도를 도(degree)로 변환
+        angle_deg = np.degrees(angle_rad)
+        
+        # 각도를 0 ~ 360도 범위로 조정
+        angle_deg = angle_deg % 360
+        if angle_deg < 0:
+            angle_deg += 360
+        
+        return angle_deg
+
+    def euler_from_quaternion(x, y, z, w):
+        t0 = +2.0 * (w * x + y * z)
+        t1 = +1.0 - 2.0 * (x * x + y * y)
+        roll_x = math.atan2(t0, t1)
+
+        t2 = +2.0 * (w * y - z * x)
+        t2 = +1.0 if t2 > +1.0 else t2
+        t2 = -1.0 if t2 < -1.0 else t2
+        pitch_y = math.asin(t2)
+
+        t3 = +2.0 * (w * z + x * y)
+        t4 = +1.0 - 2.0 * (y * y + z * z)
+        yaw_z = math.atan2(t3, t4)
+
+        return roll_x, pitch_y, yaw_z # in radians
+    def get_euler_angles_from_quaternion(self,q, degrees=True):
+        """
+        (w, x, y, z) 쿼터니언에서 x, y, z 각 축의 회전 각도(Roll, Pitch, Yaw)를 계산합니다.
+        이 공식은 Z-Y-X 순서의 오일러 각을 가정합니다.
+        
+        Args:
+            q (tuple or list): 4개의 원소를 가진 쿼터니언 (w, x, y, z).
+            degrees (bool): 각도를 도로 반환할지 여부. 기본값은 True.
+        
+        Returns:
+            tuple: (roll, pitch, yaw) 튜플.
+        """
+        w = q[0]
+        x = q[1]
+        y = q[2]
+        z = q[3]
+
+        
+        # 쿼터니언 정규화 (안정성 확보)
+        norm = np.sqrt(w**2 + x**2 + y**2 + z**2)
+        if norm == 0:
+            return (0.0, 0.0, 0.0)
+            
+        w, x, y, z = w / norm, x / norm, y / norm, z / norm
+
+        # Roll (x축 회전) 계산
+        t0 = 2.0 * (w * x + y * z)
+        t1 = 1.0 - 2.0 * (x**2 + y**2)
+        roll_rad = math.atan2(t0, t1)
+        
 
 
+
+
+        # Pitch (y축 회전) 계산
+        t2 = 2.0 * (w * y - z * x)
+        # 짐벌 잠금 방지: t2 값이 -1.0과 1.0 사이로 벗어날 경우를 처리
+        t2 = 1.0 if t2 > 1.0 else t2
+        t2 = -1.0 if t2 < -1.0 else t2
+        pitch_rad = math.asin(t2)
+        
+
+
+
+
+        # Yaw (z축 회전) 계산
+        t3 = 2.0 * (w * z + x * y)
+        t4 = 1.0 - 2.0 * (y**2 + z**2)
+        yaw_rad = math.atan2(t3, t4)
+
+
+
+        
+        if degrees:
+            roll = np.degrees(roll_rad)
+            pitch = np.degrees(pitch_rad)
+            yaw = np.degrees(yaw_rad)
+            
+            # 0~360도 범위로 조정 (선택적)
+            # roll = roll % 360
+            # pitch = pitch % 360
+            # yaw = yaw % 360
+            
+            return (roll, pitch, yaw)
+        else:
+            return (roll_rad, pitch_rad, yaw_rad)
     def training_step(self, data_dict, idx):
         output_dict = self(data_dict)
+
+        #print(output_dict['pred_noise'].shape)
+        #print(output_dict['pred_noise'][0,0,3:].detach().cpu().numpy())
+        #print(type(output_dict['pred_noise'][0,0,3:].detach().cpu().numpy()))
+        for b in range(output_dict['pred_noise'].shape[0]):
+            _di = {}
+            for p in range(output_dict['pred_noise'].shape[1]):
+                #print(self.get_euler_angles_from_quaternion(output_dict['pred_noise'][b,p,3:].detach().cpu().numpy()))
+                _di[f'360_{b}_{p}_roll'] = self.get_euler_angles_from_quaternion(output_dict['pred_noise'][b,p,3:].detach().cpu().numpy())[0]
+                _di[f'360_{b}_{p}_pitch'] = self.get_euler_angles_from_quaternion(output_dict['pred_noise'][b,p,3:].detach().cpu().numpy())[1]
+                _di[f'360_{b}_{p}_yaw'] = self.get_euler_angles_from_quaternion(output_dict['pred_noise'][b,p,3:].detach().cpu().numpy())[2]
+            #tensor_from_dict = torch.tensor(list(_di.values()))
+            #print(_di)
+            self.log_dict( _di, on_step=True, on_epoch=False)
+
+        for b in range(output_dict['pred_noise'].shape[0]):
+            _di = {}
+            for p in range(output_dict['pred_noise'].shape[1]):
+                _di[f'q_{b}_{p}_w'] = output_dict['pred_noise'][b,p,3]
+                _di[f'q_{b}_{p}_x'] = output_dict['pred_noise'][b,p,4]
+                _di[f'q_{b}_{p}_y'] = output_dict['pred_noise'][b,p,5]
+                _di[f'q_{b}_{p}_z'] = output_dict['pred_noise'][b,p,6]
+            #tensor_from_dict = torch.tensor(list(_di.values()))
+            #print(_di)
+            self.log_dict( _di, on_step=True, on_epoch=False)
+        
         loss_dict = self._loss(data_dict, output_dict)
         
         total_loss = 0

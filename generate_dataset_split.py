@@ -26,7 +26,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     dataname = args.dataname
-
+    #dataname = '0.001_10_HIP_CUR'
     datalist_file_dir = args.datalist_file_dir
     dir = args.obj_dir  
 
@@ -35,10 +35,10 @@ if __name__ == "__main__":
     _dir_list = os.listdir(dir)
     _dir_list_filtered = []
 
-    tickness = '0.005'
+    tickness = '0.003'
     is_no_gap_between_slices = 'True'
     is_curvature = 'True'
-    num_of_missing_slices = "15"
+    num_of_missing_slices = "10"
     to_index = "700"
 
     '''
@@ -46,7 +46,7 @@ if __name__ == "__main__":
     is_no_gap_between_slices = str(dataname.split("_")[1])
     is_curvature = str(dataname.split("_")[2])
     num_of_missing_slices = str(dataname.split("_")[3])
-    
+    '''
     for _dir in _dir_list:
         if not os.path.isdir(dir+"/"+_dir):
             continue
@@ -64,13 +64,13 @@ if __name__ == "__main__":
         except:
             continue
         if _tickness == tickness and _is_no_gap_between_slices == is_no_gap_between_slices \
-            and _is_curvature == is_curvature and  _num_of_missing_slices == num_of_missing_slices \
+            and _is_curvature == is_curvature \
             and  _desc == "HIP":
             _dir_list_filtered.append(_dir)
-'''
+
     #data_name = f'{tickness}_{is_no_gap_between_slices}_{is_curvature}_{num_of_missing_slices}'
     #print(data_name)
-    _dir_list_filtered = _dir_list 
+    #_dir_list_filtered = _dir_list 
     # 그룹 비율을 설정합니다 (총합이 1이 되어야 합니다).
     group_ratios = [0.80, 0.1, 0.1] 
 

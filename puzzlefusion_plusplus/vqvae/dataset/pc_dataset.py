@@ -127,7 +127,7 @@ class GeometryPartDataset(Dataset):
         tr_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32)
 
         
-        quat_gt = torch.tensor([torch.rand(1),1,0,0])
+        quat_gt = torch.tensor([torch.rand(1),0,1,0])
         quat_gt = normalize(quat_gt, p=1.0, dim = 0)
         rr = Rotate(quaternion_to_matrix(quat_gt), dtype=torch.float32)
         t = Transform3d().compose(tr).compose(rr).compose(tr_r)

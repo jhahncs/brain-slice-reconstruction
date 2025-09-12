@@ -79,12 +79,12 @@ def tiff_2_xyz(tiff_filename_full, y):
     return points_top, image_top.shape
 
 
-def tiff_2_pcd_curvature(num_of_missing_slices, image_relative_index, tiff_filename_full_top, tiff_filename_full_bottom, 
+def tiff_2_pcd_curvature(num_of_missing_slices, image_relative_index, tiff_filename_list, 
                          output_dir, tickness, no_gap_between_slices = True):
 
 
     
-    slice_filename_arr = tiff_filename_full_top.split("/")
+    slice_filename_arr = tiff_filename_list[0].split("/")
     slice_filename_itself = slice_filename_arr[len(slice_filename_arr)-1].split(".")[0]
     #obj_filename = f'{slice_filename_itself}.obj'
     obj_filename = f'{slice_filename_itself}.glb'
@@ -98,24 +98,40 @@ def tiff_2_pcd_curvature(num_of_missing_slices, image_relative_index, tiff_filen
 
 
     if no_gap_between_slices:
-        y_min = image_relative_index * (tickness *  (num_of_missing_slices+1))
-        y_max = y_min + (tickness *  (num_of_missing_slices+1))
+        y_min = image_relative_index * (tickness )
+        y_max = y_min + (tickness )
     else:
         y_min = image_relative_index * tickness
         y_max = y_min + tickness
     #print(image_relative_index, y_min , y_max)
+    num_interpolated = int(tickness*1000)
+    _pre_points = None
+    _cur_y = y_min
+    xyz_list = []
+    #print(tiff_filename_list)
+    for _i, tiff_filename in enumerate(tiff_filename_list):
+        points_this, (h, w, c ) = tiff_2_xyz(tiff_filename, _cur_y)
+
+        
 
 
-    points_top, (h, w, c ) = tiff_2_xyz(tiff_filename_full_top, y_min)
-    points_bottom, (h, w, c ) = tiff_2_xyz(tiff_filename_full_bottom, y_max)
-    #print('offset_y',offset_y)
-    #print('tickness',tickness)
-    #print(np.min(points_top, axis=0),np.max(points_top, axis=0))
-    #print(np.min(points_bottom, axis=0),np.max(points_bottom, axis=0))
+        
+
+        if _pre_points is not None:
+            #print(f'{_i}, {_cur_y:.3f} / {np.min(_pre_points, axis=0)[1]:.3f}, {np.max(_pre_points, axis=0)[1]:.3f} / {np.min(points_this, axis=0)[1]:.3f}, {np.max(points_this, axis=0)[1]:.3f}')
+            _xyz_list = interpolate_points_between_borders(_pre_points, points_this, num_interpolated)
+            #print(f'{np.min(_xyz_list, axis=0)[1]:.3f},{np.max(_xyz_list, axis=0)[1]:.3f}')
+            xyz_list.extend(_xyz_list)
+        _cur_y += tickness
+        _pre_points = points_this
+        
+
+
+    #points_bottom, (h, w, c ) = tiff_2_xyz(tiff_filename_full_bottom, y_max)
+
     # --- 사용 예시 ---
 
-    num_interpolated = 25
-    xyz_list = interpolate_points_between_borders(points_top, points_bottom, num_interpolated)
+
     
     for xyz in xyz_list:
         xyz[0] = 1.0 - xyz[0] 
@@ -123,7 +139,7 @@ def tiff_2_pcd_curvature(num_of_missing_slices, image_relative_index, tiff_filen
 
     for xyz in xyz_list:
         xyz[2] *= (h/w)
-    #print(f'{offset_y:.3f},{tickness},{np.min(xyz_list, axis=0)[1]:.3f},{np.max(xyz_list, axis=0)[1]:.3f}')
+    #print(f'{tickness},{np.min(xyz_list, axis=0)[1]:.3f},{np.max(xyz_list, axis=0)[1]:.3f}')
     point_cloud = trimesh.PointCloud(vertices=np.array(xyz_list))
     point_cloud.export(file_obj=pcd_filename)
 
@@ -346,23 +362,25 @@ def tiff_2_obj_parallel(image_filename_list_sub, slice_angle, tickness:float,
     elif len(image_filename_list_sub) <= 3:
         return obj_dir_list
     '''
-    #print(image_filename_list_sub)
+    #print('image_filename_list_sub',image_filename_list_sub)
     start_data_id = image_filename_list_sub[0].split("/")[-1].split(".")[-2]
     end_data_id = image_filename_list_sub[-1].split("/")[-1].split(".")[-2]
-    obj_slicing_dir = f'{obj_dir_root}/{slice_angle}_{tickness:.3f}_{no_gap_between_slices}_{num_of_missing_slices}_{start_data_id}_{is_curvature}_{end_data_id}_HIP_{len(image_filename_list_sub)-1}/fractured_0'
-    if os.path.exists(obj_slicing_dir):
-        print("EXISTS: ",obj_slicing_dir.split("/")[-2])
-        return obj_dir_list
+    obj_slicing_dir = f'{obj_dir_root}/{slice_angle}_{tickness:.3f}_{no_gap_between_slices}_{num_of_missing_slices}_{start_data_id}_{is_curvature}_{end_data_id}_HIP_{num_of_slices}/fractured_0'
+    #if os.path.exists(obj_slicing_dir):
+    #    print("EXISTS: ",obj_slicing_dir.split("/")[-2])
+    #    return obj_dir_list
     
-    _image_filename_list_sub = image_filename_list_sub[]
+    
     if is_curvature:        
         _tiff_2_pcd_func = tiff_2_pcd_curvature
     else:
         _tiff_2_pcd_func = tiff_2_pcd
 
-    for _i in range(len(image_filename_list_sub)-1):
+    for _i in range(0, len(image_filename_list_sub)-num_of_missing_slices+2, num_of_missing_slices):
+        _image_filename_list_sub = image_filename_list_sub[_i:_i+num_of_missing_slices]
+        #print('image_filename_list_sub',_image_filename_list_sub)
         _tiff_2_pcd_func(num_of_missing_slices, _i, 
-                            image_filename_list_sub[_i], image_filename_list_sub[_i+1], 
+                            _image_filename_list_sub, 
                             obj_slicing_dir, tickness, no_gap_between_slices)
     
 
@@ -484,7 +502,7 @@ if __name__ == "__main__":
     print(data_ids)
 
     to_index=700
-    tickness_list_const = [0.001]
+    tickness_list_const = [0.004]
     no_gap_between_slices_list = [True]
     is_curvature_list = [True]
     num_of_missing_slices_list = sorted(list(range(0, 6, 1))) #[0, 1, 2, 3, 4, 5] # 10, 15, 20, 15, 30, 35, 40, 45, 50]
@@ -513,9 +531,9 @@ if __name__ == "__main__":
     slice_angle_to_range_map['sliced_on_1_1_0'] = (70,490)
     slice_angle_to_range_map['sliced_on_1_1_1'] = (430,550)
     tasks_to_run = []
-    num_of_slices_list = [5,7,10,12,15,17]
+    num_of_slices_list = [ 5,7,10,12,15,17]
 
-    for slice_angle in data_ids:
+    for slice_angle in data_ids[:1]:
         _from_index = slice_angle_to_range_map[slice_angle][0]
         to_index = slice_angle_to_range_map[slice_angle][1]
 
@@ -529,7 +547,7 @@ if __name__ == "__main__":
 
         
         
-        for num_of_missing_slices in num_of_missing_slices_list:
+        for num_of_missing_slices in num_of_missing_slices_list[:1]:
             
             from_index_list = sorted(list(range(_from_index, to_index - num_of_missing_slices, 1)))
 
@@ -538,14 +556,15 @@ if __name__ == "__main__":
                     for tickness in tickness_list_const:
                         for from_index in from_index_list:
 
-                            image_filename_list_sub = image_filename_list[from_index  : to_index : ]
-                            
-                            if int(len(image_filename_list_sub)/(num_of_missing_slices + 1)) in num_of_slices_list:
+                            image_filename_list_sub = image_filename_list[from_index  : to_index ]
+                            _num_of_slices = int((len(image_filename_list_sub)+1)/(num_of_missing_slices )) 
+                            #print(from_index, to_index, int(( len(image_filename_list_sub)+1)/(num_of_missing_slices )))
+                            if _num_of_slices in num_of_slices_list:
 
                                 #print(from_index, num_of_missing_slices, len(image_filename_list_sub))
                                 tasks_to_run.append(( image_filename_list_sub, slice_angle, tickness, num_of_missing_slices,  
                                                     args.obj_dir_root, no_gap_between_slices, 
-                                                    from_index, to_index, len(image_filename_list_sub) , is_curvature))
+                                                    from_index, to_index, _num_of_slices, is_curvature))
 
         #                    distribute_obj_files(data_ids, tickness, num_of_missing_slices, args.obj_dir_root, from_index, to_index, max_num_of_slices, no_gap_between_slices)
                             #if True:
@@ -556,7 +575,7 @@ if __name__ == "__main__":
     
     
     print(f'tiff_2_obj_parallel: the number of jobs:{len(tasks_to_run)}')
-    with multiprocessing.Pool() as pool: # Use a pool of 4 processes
+    with multiprocessing.Pool( ) as pool: # Use a pool of 4 processes
         pool.starmap(tiff_2_obj_parallel, tqdm(tasks_to_run, total=len(tasks_to_run), desc="tiff_2_obj_parallel"))
 
 

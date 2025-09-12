@@ -150,16 +150,7 @@ class GeometryPartDataset(Dataset):
         pc = pc - centroid[None]
         return pc, centroid
     
-    def _rotate_pc(self, pc):
-        """pc: [N, 3]"""
 
-        rot_mat = R.random().as_matrix()
-
-        pc = (rot_mat @ pc.T).T
-        quat_gt = R.from_matrix(rot_mat.T).as_quat()
-        # we use scalar-first quaternion
-        quat_gt = quat_gt[[3, 0, 1, 2]]
-        return pc, quat_gt
     
     def _pad_data(self, data):
         """Pad data to shape [`self.max_num_part`, data.shape[1], ...]."""
