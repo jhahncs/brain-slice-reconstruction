@@ -14,6 +14,7 @@ def init_callbacks(cfg):
     # print_callback = PrintCallback()
     return [checkpoint_monitor, lr_monitor]
 
+from pytorch_lightning.strategies import DDPStrategy
 
 @hydra.main(version_base=None, config_path="config/denoiser", config_name="global_config")
 def main(cfg):

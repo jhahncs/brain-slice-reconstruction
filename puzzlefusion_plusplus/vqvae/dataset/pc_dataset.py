@@ -115,7 +115,45 @@ class GeometryPartDataset(Dataset):
         return pc, centroid
 
 
+    '''
+    @staticmethod
+    def angle_2_quaternion(angle_rad):
+        rotation = R.from_rotvec([0, angle_rad, 0])
+        quaternion = rotation.as_quat()[[3, 0, 1, 2]]
+        
+        return torch.from_numpy(quaternion)
+    '''
+    @staticmethod
+    def y_axis_rotation_quaternion_from_rad(angle_radians):
+        """
+        y축 회전각(라디안)에 대한 쿼터니언 텐서를 생성합니다.
+        
+        Args:
+            angle_radians (torch.Tensor): 회전 각도를 담은 스칼라 또는 배치 텐서.
+                                        단위는 라디안.
+        Returns:
+            torch.Tensor: [x, y, z, w] 형식을 따르는 쿼터니언 텐서.
+        """
+        # 1. 반각(half-angle) 계산
+        half_angle = angle_radians / 2.0
+        
+        # 2. 사인, 코사인 값 계산
+        sin_half_angle = torch.sin(half_angle)
+        cos_half_angle = torch.cos(half_angle)
 
+        # 3. 차원 확장 및 쿼터니언 텐서 생성
+        #    .unsqueeze(-1)로 차원을 확장하여 배치 처리 가능하게 함
+        sin_half_angle = sin_half_angle.unsqueeze(-1)
+        cos_half_angle = cos_half_angle.unsqueeze(-1)
+        
+        # 쿼터니언의 x, z 성분은 0이므로, 0으로 채워진 텐서를 생성
+        zeros = torch.zeros_like(sin_half_angle)
+        
+        # [x, y, z, w] 순서로 텐서를 결합 (concatenate)
+        #quaternion = torch.cat([zeros, sin_half_angle, zeros, cos_half_angle], dim=-1)
+        quaternion = torch.cat([cos_half_angle, zeros, sin_half_angle, zeros ], dim=-1)
+        
+        return quaternion
 
     @staticmethod
     def _rotate_pc(pc, device):
@@ -127,8 +165,13 @@ class GeometryPartDataset(Dataset):
         tr_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32)
 
         
-        quat_gt = torch.tensor([torch.rand(1),0,1,0])
-        quat_gt = normalize(quat_gt, p=1.0, dim = 0)
+        #quat_gt = torch.tensor([torch.rand(1),0,1,0])
+        #quat_gt = normalize(quat_gt, p=1.0, dim = 0)
+
+        random_radian = (2 * torch.rand(1) - 1) * 2 * torch.pi
+        #random_radian = np.random.uniform(low=-2 * np.pi, high=2 * np.pi)
+        quat_gt = GeometryPartDataset.y_axis_rotation_quaternion_from_rad(random_radian) 
+        quat_gt = torch.squeeze(quat_gt, dim=0)
         rr = Rotate(quaternion_to_matrix(quat_gt), dtype=torch.float32)
         t = Transform3d().compose(tr).compose(rr).compose(tr_r)
         pc = t.transform_points(pc)#.to(torch.float).to(device)

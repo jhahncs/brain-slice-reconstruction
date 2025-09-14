@@ -8,7 +8,12 @@ from puzzlefusion_plusplus.denoiser.model.modules.custom_diffusers import Piecew
 import torch
 import torch
 from torch.nn.functional import normalize
-
+from puzzlefusion_plusplus.denoiser.evaluation.transform import (
+    transform_pc,
+    quaternion_to_euler,
+    quaternion_to_matrix,
+    rotate_y_axis
+)
 from pytorch3d.transforms import Transform3d
 from pytorch3d.transforms.transform3d import (
     Rotate,
@@ -143,8 +148,13 @@ class GeometryLatentDataset(Dataset):
             c_pcs = pcs[pcs_count:pcs_count+n_pcs[i]]
             
             c_pcs = c_pcs - trans[i]
-            c_pcs = R.from_quat(rots[i][[1, 2, 3, 0]]).inv().apply(c_pcs) # [w, x, y, z] -> [x, y, z, w]
-            
+
+
+
+            #c_pcs = R.from_quat(rots[i][[1, 2, 3, 0]]).inv().apply(c_pcs) # [w, x, y, z] -> [x, y, z, w]
+            c_pcs = rotate_y_axis(rots[i],c_pcs)
+
+
             final_pose_pts.append(c_pcs)
             pcs_count += n_pcs[i]
         
@@ -174,7 +184,37 @@ class GeometryLatentDataset(Dataset):
         quat_gt = quat_gt[[3, 0, 1, 2]]
         return pc, quat_gt
 
+    @staticmethod
+    def y_axis_rotation_quaternion_from_rad(angle_radians):
+        """
+        y축 회전각(라디안)에 대한 쿼터니언 텐서를 생성합니다.
+        
+        Args:
+            angle_radians (torch.Tensor): 회전 각도를 담은 스칼라 또는 배치 텐서.
+                                        단위는 라디안.
+        Returns:
+            torch.Tensor: [x, y, z, w] 형식을 따르는 쿼터니언 텐서.
+        """
+        # 1. 반각(half-angle) 계산
+        half_angle = angle_radians / 2.0
+        
+        # 2. 사인, 코사인 값 계산
+        sin_half_angle = torch.sin(half_angle)
+        cos_half_angle = torch.cos(half_angle)
 
+        # 3. 차원 확장 및 쿼터니언 텐서 생성
+        #    .unsqueeze(-1)로 차원을 확장하여 배치 처리 가능하게 함
+        sin_half_angle = sin_half_angle.unsqueeze(-1)
+        cos_half_angle = cos_half_angle.unsqueeze(-1)
+        
+        # 쿼터니언의 x, z 성분은 0이므로, 0으로 채워진 텐서를 생성
+        zeros = torch.zeros_like(sin_half_angle)
+        
+        # [x, y, z, w] 순서로 텐서를 결합 (concatenate)
+        #quaternion = torch.cat([zeros, sin_half_angle, zeros, cos_half_angle], dim=-1)
+        quaternion = torch.cat([cos_half_angle, zeros, sin_half_angle, zeros ], dim=-1)
+        
+        return quaternion
 
     @staticmethod
     def _rotate_pc(pc):
@@ -187,8 +227,15 @@ class GeometryLatentDataset(Dataset):
         tr_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32)
 
         
-        quat_gt = torch.tensor([torch.rand(1),0,1,0])
-        quat_gt = normalize(quat_gt, p=1.0, dim = 0)
+        #quat_gt = torch.tensor([torch.rand(1),0,1,0])
+        #quat_gt = normalize(quat_gt, p=1.0, dim = 0)
+
+        #random_radian = np.random.uniform(low=0, high=2 * np.pi)
+        random_radian = (2 * torch.rand(1) - 1) * 2 * torch.pi
+        quat_gt = GeometryLatentDataset.y_axis_rotation_quaternion_from_rad(random_radian) 
+        quat_gt = torch.squeeze(quat_gt, dim=0)
+
+
         rr = Rotate(quaternion_to_matrix(quat_gt), dtype=torch.float32)
         t = Transform3d().compose(tr).compose(rr).compose(tr_r)
         pc = t.transform_points(pc)#.to(torch.float).to(device)
@@ -208,7 +255,7 @@ class GeometryLatentDataset(Dataset):
         # we use scalar-first quaternion
         quat_gt = quat_gt[[3, 0, 1, 2]]
         return pc.reshape(P, N, 3), quat_gt
-    
+
     def _rotate_whole_part(self, pc):
         """
         pc: [P, N, 3]
@@ -225,8 +272,11 @@ class GeometryLatentDataset(Dataset):
         tr_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32)
 
         
-        quat_gt = torch.tensor([torch.rand(1),0,1,0])
-        quat_gt = normalize(quat_gt, p=1.0, dim = 0)
+        #quat_gt = torch.tensor([torch.rand(1),0,1,0])
+        #quat_gt = normalize(quat_gt, p=1.0, dim = 0)
+        random_radian = (2 * torch.rand(1) - 1) * 2 * torch.pi
+        quat_gt = self.y_axis_rotation_quaternion_from_rad(random_radian) 
+        quat_gt = torch.squeeze(quat_gt, dim=0)
         rr = Rotate(quaternion_to_matrix(quat_gt), dtype=torch.float32)
         t = Transform3d().compose(tr).compose(rr).compose(tr_r)
         pc = t.transform_points(pc)#.to(torch.float).to(device)
@@ -331,7 +381,7 @@ class GeometryLatentDataset(Dataset):
             return data_dict
         
         # half of the time, only one reference part
-        if np.random.rand() < 0.5:
+        if True or np.random.rand() < 0.5:
             return data_dict
         
         # Randomly sample more reference parts which connected to the original reference part
@@ -361,21 +411,21 @@ class GeometryLatentDataset(Dataset):
         noise_trans = torch.randn(part_trans_ref.shape)
         noise_rots = torch.randn(part_rots_ref.shape)
         timesteps = torch.randint(0, 50, (1,)).long()
-        
+        '''
         if self.rotation_1d:
             noise_rots[...,1] = torch.repeat_interleave(torch.Tensor([0]), noise_rots.shape[-2], dim=0).unsqueeze(dim=0)
             noise_rots[...,2] = torch.repeat_interleave(torch.Tensor([1]), noise_rots.shape[-2], dim=0).unsqueeze(dim=0)
             noise_rots[...,3] = torch.repeat_interleave(torch.Tensor([0]), noise_rots.shape[-2], dim=0).unsqueeze(dim=0)
-
+        '''
 
         part_trans_ref = self.noise_scheduler.add_noise(torch.tensor(part_trans_ref), noise_trans, timesteps).numpy()
         part_rots_ref = self.noise_scheduler.add_noise(torch.tensor(part_rots_ref), noise_rots, timesteps).numpy()
-
+        '''
         if self.rotation_1d:
             part_rots_ref[...,1] = torch.repeat_interleave(torch.Tensor([0]), part_rots_ref.shape[-2], dim=0).unsqueeze(dim=0)
             part_rots_ref[...,2] = torch.repeat_interleave(torch.Tensor([1]), part_rots_ref.shape[-2], dim=0).unsqueeze(dim=0)
             part_rots_ref[...,3] = torch.repeat_interleave(torch.Tensor([0]), part_rots_ref.shape[-2], dim=0).unsqueeze(dim=0)
-
+        '''
         data_dict['part_trans'][sample_ref_parts] = part_trans_ref
         data_dict['part_rots'][sample_ref_parts] = part_rots_ref
 

@@ -4,9 +4,24 @@ from torch.nn import functional as F
 from utils.model_utils import (
     PositionalEncoding,
     EmbedderNerf
+
+from puzzlefusion_plusplus.denoiser.evaluation.transform import (
+    transform_pc,
+    quaternion_to_euler,
+    quaternion_to_matrix,
+    rotate_y_axis,
+    y_axis_rotation_quaternion_from_rad
 )
 from puzzlefusion_plusplus.denoiser.model.modules.attention import EncoderLayer
-
+from scipy.spatial.transform import Rotation as R
+import numpy as np
+class Lambda(nn.Module):
+    def __init__(self, func):
+        super().__init__()
+        self.func = func
+    
+    def forward(self, x):
+        return self.func(x)
 
 class DenoiserTransformer(nn.Module):
 
@@ -92,6 +107,7 @@ class DenoiserTransformer(nn.Module):
             nn.SiLU(),
             nn.Linear(self.model_channels // 2, 3),
         )
+
         #self.hardtanh = nn.Hardtanh(min_val=-300, max_val=300)
         # mlp out for rotation N, 256 -> N, 4
         self.mlp_out_rot = nn.Sequential(
@@ -99,7 +115,10 @@ class DenoiserTransformer(nn.Module):
             nn.SiLU(),
             nn.Linear(self.model_channels, self.model_channels // 2),
             nn.SiLU(),
-            nn.Linear(self.model_channels // 2, 4) ,
+            nn.Linear(self.model_channels // 2, 1) ,
+            nn.Tanh(),
+            Lambda(lambda x: x * torch.pi * 2)
+
             #nn.Hardtanh(min_val=-300, max_val=300)
               # jhahn
         )
@@ -135,8 +154,37 @@ class DenoiserTransformer(nn.Module):
 
         x_emb = self.param_fc(self.param_embedding(x))
         return x_emb, shape_emb
+    @staticmethod
+    def y_axis_rotation_quaternion_from_rad(angle_radians):
+        """
+        y축 회전각(라디안)에 대한 쿼터니언 텐서를 생성합니다.
+        
+        Args:
+            angle_radians (torch.Tensor): 회전 각도를 담은 스칼라 또는 배치 텐서.
+                                        단위는 라디안.
+        Returns:
+            torch.Tensor: [x, y, z, w] 형식을 따르는 쿼터니언 텐서.
+        """
+        # 1. 반각(half-angle) 계산
+        half_angle = angle_radians / 2.0
+        
+        # 2. 사인, 코사인 값 계산
+        sin_half_angle = torch.sin(half_angle)
+        cos_half_angle = torch.cos(half_angle)
 
-
+        # 3. 차원 확장 및 쿼터니언 텐서 생성
+        #    .unsqueeze(-1)로 차원을 확장하여 배치 처리 가능하게 함
+        sin_half_angle = sin_half_angle.unsqueeze(-1)
+        cos_half_angle = cos_half_angle.unsqueeze(-1)
+        
+        # 쿼터니언의 x, z 성분은 0이므로, 0으로 채워진 텐서를 생성
+        zeros = torch.zeros_like(sin_half_angle)
+        
+        # [x, y, z, w] 순서로 텐서를 결합 (concatenate)
+        #quaternion = torch.cat([zeros, sin_half_angle, zeros, cos_half_angle], dim=-1)
+        quaternion = torch.cat([cos_half_angle, zeros, sin_half_angle, zeros ], dim=-1)
+        
+        return quaternion
     def _out(self, data_emb, B, N, L):
         out = data_emb.reshape(B, N, L, self.model_channels)
 
@@ -146,6 +194,11 @@ class DenoiserTransformer(nn.Module):
         trans = self.mlp_out_trans(out)
         rots = self.mlp_out_rot(out)
 
+        #rots = self.angle_2_quaternion(rots)
+        rots = y_axis_rotation_quaternion_from_rad(rots)
+        rots = torch.squeeze(rots, dim=2)
+
+        #print('rots',rots.shape)
         # tanh 함수를 적용하여 출력 범위를 (-1, 1)로 제한
         #tanh_output = self.tanh(rots)
         
@@ -156,6 +209,7 @@ class DenoiserTransformer(nn.Module):
         #print(rots[...,3])
         #print(rots[...,3].shape)
         #print('@@',torch.min(rots[...,3], axis=0))
+        '''
         y_min = torch.min(torch.min(rots[...,3], axis=0)[0], axis=0)[0]
         y_max = torch.max(torch.max(rots[...,3], axis=0)[0], axis=0)[0]
         #print('y_min',y_min)
@@ -165,9 +219,9 @@ class DenoiserTransformer(nn.Module):
             rots[...,3] = ((rots[...,3] - y_min) / (y_max - y_min))*100
         else:
             rots[...,3] = rots[...,3]  # or some default value if all outputs are the same
+        '''
 
-
-
+        
 
         return torch.cat([trans, rots], dim=-1)
 

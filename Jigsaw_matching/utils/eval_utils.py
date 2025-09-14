@@ -6,8 +6,20 @@ from .chamfer import chamfer_distance
 from .loss import _valid_mean
 from .transforms import transform_pc
 import pytorch3d.transforms as transforms
-
-
+from pytorch3d.transforms.transform3d import (
+    Rotate,
+    RotateAxisAngle,
+    Scale,
+    Transform3d,
+    Translate,
+)
+from puzzlefusion_plusplus.denoiser.evaluation.transform import (
+    transform_pc,
+    quaternion_to_euler,
+    quaternion_to_matrix,
+    rotate_y_axis
+)
+import numpy as np
 # @torch.no_grad()
 # def calc_part_acc(pts, trans1, trans2, rot1, rot2, valids, ret_cd=False):
 #     """Compute the `Part Accuracy` in the paper.
@@ -135,7 +147,9 @@ def calc_shape_cd(pts, n_pcs, trans1, rot1, gt_pcs, valids):
             c_trans = trans1[b, i]
             c_rots = rot1[b, i].to_quat()
 
-            c_pts = transforms.quaternion_apply(c_rots, c_pts)
+            #c_pts = transforms.quaternion_apply(c_rots, c_pts)
+            c_pts = rotate_y_axis(c_rots, c_pts)
+
             c_pts = c_pts + c_trans
             final_pts.append(c_pts)
             index += n_pcs[0][i]
@@ -302,3 +316,128 @@ def rot_metrics(rot1, rot2, valids, metric):
         metric_per_data = diff.abs().mean(dim=-1)
     metric_per_data = _valid_mean(metric_per_data, valids)
     return metric_per_data
+
+
+
+def get_euler_angles_from_quaternion(self,q, degrees=True):
+        """
+        (w, x, y, z) 쿼터니언에서 x, y, z 각 축의 회전 각도(Roll, Pitch, Yaw)를 계산합니다.
+        이 공식은 Z-Y-X 순서의 오일러 각을 가정합니다.
+        
+        Args:
+            q (tuple or list): 4개의 원소를 가진 쿼터니언 (w, x, y, z).
+            degrees (bool): 각도를 도로 반환할지 여부. 기본값은 True.
+        
+        Returns:
+            tuple: (roll, pitch, yaw) 튜플.
+        """
+        w = q[0]
+        x = q[1]
+        y = q[2]
+        z = q[3]
+
+        
+        # 쿼터니언 정규화 (안정성 확보)
+        norm = np.sqrt(w**2 + x**2 + y**2 + z**2)
+        if norm == 0:
+            return (0.0, 0.0, 0.0)
+            
+        w, x, y, z = w / norm, x / norm, y / norm, z / norm
+
+        # Roll (x축 회전) 계산
+        t0 = 2.0 * (w * x + y * z)
+        t1 = 1.0 - 2.0 * (x**2 + y**2)
+        roll_rad = math.atan2(t0, t1)
+        
+
+
+
+
+        # Pitch (y축 회전) 계산
+        t2 = 2.0 * (w * y - z * x)
+        # 짐벌 잠금 방지: t2 값이 -1.0과 1.0 사이로 벗어날 경우를 처리
+        t2 = 1.0 if t2 > 1.0 else t2
+        t2 = -1.0 if t2 < -1.0 else t2
+        pitch_rad = math.asin(t2)
+        
+
+
+
+
+        # Yaw (z축 회전) 계산
+        t3 = 2.0 * (w * z + x * y)
+        t4 = 1.0 - 2.0 * (y**2 + z**2)
+        yaw_rad = math.atan2(t3, t4)
+
+
+
+        
+        if degrees:
+            roll = np.degrees(roll_rad)
+            pitch = np.degrees(pitch_rad)
+            yaw = np.degrees(yaw_rad)
+            
+            # 0~360도 범위로 조정 (선택적)
+            # roll = roll % 360
+            # pitch = pitch % 360
+            # yaw = yaw % 360
+            
+            return (roll, pitch, yaw)
+        else:
+            return (roll_rad, pitch_rad, yaw_rad)
+
+
+def calculate_dice_score_from_point_clouds(self, pc1: np.ndarray, pc2: np.ndarray, resolution: int = 64) -> float:
+    """
+    Calculates the Dice score between two point clouds using voxelization.
+
+    Args:
+        pc1 (np.ndarray): The first point cloud, shape (N, 3).
+        pc2 (np.ndarray): The second point cloud, shape (M, 3).
+        resolution (int): The resolution of the 3D voxel grid.
+
+    Returns:
+        float: The Dice score (0.0 to 1.0).
+    """
+
+    # 1. Normalize point clouds to fit within a [0, 1] cube
+    combined_pc = np.concatenate([pc1, pc2], axis=0)
+    min_coords = np.min(combined_pc, axis=0)
+    max_coords = np.max(combined_pc, axis=0)
+    
+    # Handle the case of zero-size point clouds or flat point clouds
+    if np.all(min_coords == max_coords):
+        if pc1.shape[0] > 0 and pc2.shape[0] > 0:
+            return 1.0 # Both are single points at the same location
+        return 0.0 # One or both are empty
+    
+    scale = max_coords - min_coords
+    
+    
+    pc1_norm = (pc1 - min_coords) / scale
+    pc2_norm = (pc2 - min_coords) / scale
+
+    # 2. Voxelize the point clouds
+    # Get voxel indices for each point
+    voxel_coords1 = np.floor(pc1_norm * (resolution - 1)).astype(int)
+    voxel_coords2 = np.floor(pc2_norm * (resolution - 1)).astype(int)
+    #print(voxel_coords1)
+    #print(voxel_coords2)
+    # Convert coordinates to a single index for a flat array
+    voxel_indices1 = (voxel_coords1[:, 0] * resolution * resolution) + (voxel_coords1[:, 1] * resolution) + voxel_coords1[:, 2]
+    voxel_indices2 = (voxel_coords2[:, 0] * resolution * resolution) + (voxel_coords2[:, 1] * resolution) + voxel_coords2[:, 2]
+
+    # Create binary voxel sets
+    voxel_set1 = set(voxel_indices1)
+    voxel_set2 = set(voxel_indices2)
+
+    # 3. Calculate intersection and union
+    intersection_size = len(voxel_set1.intersection(voxel_set2))
+    total_size = len(voxel_set1) + len(voxel_set2)
+    #print('intersection_size',intersection_size)
+    # 4. Calculate Dice score
+    dice_score = (2.0 * intersection_size) / total_size if total_size > 0 else 0.0
+    
+    return dice_score
+
+        

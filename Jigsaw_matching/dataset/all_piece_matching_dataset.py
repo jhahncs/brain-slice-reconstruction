@@ -126,7 +126,7 @@ class AllPieceMatchingDataset(Dataset):
         pc: [N, 3]
         normal: [N, 3]
         """
-
+        print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
         if self.rot_range > 0.0:
             rot_euler = (np.random.rand(3) - 0.5) * 2.0 * self.rot_range
             rot_mat = R.from_euler("xyz", rot_euler, degrees=True).as_matrix()

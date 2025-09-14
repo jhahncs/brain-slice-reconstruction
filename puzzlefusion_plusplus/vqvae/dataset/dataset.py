@@ -169,7 +169,7 @@ class GeometryPartDataset(Dataset):
         mesh_files = [f for f in mesh_files if f.endswith('.glb') ]
         #mesh_files.sort()
         mesh_files.sort(key = lambda k: int(k.replace('.glb',"")))
-        print(data_folder,mesh_files)
+        #print(data_folder,mesh_files)
         if len(mesh_files) > self.max_num_part:
             mesh_files = mesh_files[:20]
 
