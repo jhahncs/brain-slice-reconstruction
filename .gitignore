@@ -1,6 +1,7 @@
 *.obj
 *.png
 *.ckpt
+lightning_logs/
 output/
 render_results/
 wandb/

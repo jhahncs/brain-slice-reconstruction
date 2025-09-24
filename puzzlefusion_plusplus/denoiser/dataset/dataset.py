@@ -12,7 +12,8 @@ from puzzlefusion_plusplus.denoiser.evaluation.transform import (
     transform_pc,
     quaternion_to_euler,
     quaternion_to_matrix,
-    rotate_y_axis
+    rotate_y_axis,
+    y_axis_rotation_quaternion_from_rad
 )
 from pytorch3d.transforms import Transform3d
 from pytorch3d.transforms.transform3d import (
@@ -24,36 +25,6 @@ from pytorch3d.transforms.transform3d import (
 )
 
 
-def quaternion_to_matrix(quaternions: torch.Tensor) -> torch.Tensor:
-    """
-    Convert rotations given as quaternions to rotation matrices.
-
-    Args:
-        quaternions: quaternions with real part first,
-            as tensor of shape (..., 4).
-
-    Returns:
-        Rotation matrices as tensor of shape (..., 3, 3).
-    """
-    r, i, j, k = torch.unbind(quaternions, -1)
-    # pyre-fixme[58]: `/` is not supported for operand types `float` and `Tensor`.
-    two_s = 2.0 / (quaternions * quaternions).sum(-1)
-
-    o = torch.stack(
-        (
-            1 - two_s * (j * j + k * k),
-            two_s * (i * j - k * r),
-            two_s * (i * k + j * r),
-            two_s * (i * j + k * r),
-            1 - two_s * (i * i + k * k),
-            two_s * (j * k - i * r),
-            two_s * (i * k - j * r),
-            two_s * (j * k + i * r),
-            1 - two_s * (i * i + j * j),
-        ),
-        -1,
-    )
-    return o.reshape(quaternions.shape[:-1] + (3, 3))
 
 class GeometryLatentDataset(Dataset):
     def __init__(
@@ -185,60 +156,38 @@ class GeometryLatentDataset(Dataset):
         return pc, quat_gt
 
     @staticmethod
-    def y_axis_rotation_quaternion_from_rad(angle_radians):
-        """
-        y축 회전각(라디안)에 대한 쿼터니언 텐서를 생성합니다.
-        
-        Args:
-            angle_radians (torch.Tensor): 회전 각도를 담은 스칼라 또는 배치 텐서.
-                                        단위는 라디안.
-        Returns:
-            torch.Tensor: [x, y, z, w] 형식을 따르는 쿼터니언 텐서.
-        """
-        # 1. 반각(half-angle) 계산
-        half_angle = angle_radians / 2.0
-        
-        # 2. 사인, 코사인 값 계산
-        sin_half_angle = torch.sin(half_angle)
-        cos_half_angle = torch.cos(half_angle)
-
-        # 3. 차원 확장 및 쿼터니언 텐서 생성
-        #    .unsqueeze(-1)로 차원을 확장하여 배치 처리 가능하게 함
-        sin_half_angle = sin_half_angle.unsqueeze(-1)
-        cos_half_angle = cos_half_angle.unsqueeze(-1)
-        
-        # 쿼터니언의 x, z 성분은 0이므로, 0으로 채워진 텐서를 생성
-        zeros = torch.zeros_like(sin_half_angle)
-        
-        # [x, y, z, w] 순서로 텐서를 결합 (concatenate)
-        #quaternion = torch.cat([zeros, sin_half_angle, zeros, cos_half_angle], dim=-1)
-        quaternion = torch.cat([cos_half_angle, zeros, sin_half_angle, zeros ], dim=-1)
-        
-        return quaternion
-
-    @staticmethod
     def _rotate_pc(pc):
         """pc: [N, 3]"""
         
         pc = torch.from_numpy(pc).float()
 
-        _mean = torch.mean(pc, axis=0)
-        tr = Translate(-_mean[0],-_mean[1],-_mean[2], dtype=torch.float32)
-        tr_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32)
 
         
         #quat_gt = torch.tensor([torch.rand(1),0,1,0])
         #quat_gt = normalize(quat_gt, p=1.0, dim = 0)
 
+
+        #_rotate_pc_rad torch.Size([3, 4]) tensor([-2.6932,  6.0788,  0.7550])
+        #_rotate_pc torch.Size([4])
         #random_radian = np.random.uniform(low=0, high=2 * np.pi)
-        random_radian = (2 * torch.rand(1) - 1) * 2 * torch.pi
-        quat_gt = GeometryLatentDataset.y_axis_rotation_quaternion_from_rad(random_radian) 
-        quat_gt = torch.squeeze(quat_gt, dim=0)
-
-
+        #random_radian = ( torch.rand(3) ) * 4 * torch.pi - 2 * torch.pi  
+        #quat_gt = y_axis_rotation_quaternion_from_rad(random_radian) 
+        #quat_gt = torch.squeeze(quat_gt, dim=0)
+        #print('_rotate_pc_rad',quat_gt.shape, random_radian)
+        quat_gt = torch.randn(4)
+        quat_gt[1] = 0
+        quat_gt[3] = 0
+        quat_gt = quat_gt / quat_gt.norm(dim=-1, keepdim=True)
+        #print('_rotate_pc',quat_gt.shape)
+        
+        _mean = torch.mean(pc, axis=0)
+        tr = Translate(-_mean[0],-_mean[1],-_mean[2], dtype=torch.float32)
+        tr_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32)
         rr = Rotate(quaternion_to_matrix(quat_gt), dtype=torch.float32)
-        t = Transform3d().compose(tr).compose(rr).compose(tr_r)
-        pc = t.transform_points(pc)#.to(torch.float).to(device)
+        pc = Transform3d().compose(tr).transform_points(pc)
+        pc = Transform3d().compose(rr).transform_points(pc)
+        pc = Transform3d().compose(tr_r).transform_points(pc)
+        
         
         return pc.cpu().numpy(), quat_gt.cpu().numpy()
 
@@ -250,6 +199,7 @@ class GeometryLatentDataset(Dataset):
         P, N, _ = pc.shape
         pc = pc.reshape(-1, 3)
         rot_mat = R.random().as_matrix()
+        print('rot_mat',rot_mat)
         pc = (rot_mat @ pc.T).T
         quat_gt = R.from_matrix(rot_mat.T).as_quat()
         # we use scalar-first quaternion
@@ -274,14 +224,30 @@ class GeometryLatentDataset(Dataset):
         
         #quat_gt = torch.tensor([torch.rand(1),0,1,0])
         #quat_gt = normalize(quat_gt, p=1.0, dim = 0)
-        random_radian = (2 * torch.rand(1) - 1) * 2 * torch.pi
-        quat_gt = self.y_axis_rotation_quaternion_from_rad(random_radian) 
-        quat_gt = torch.squeeze(quat_gt, dim=0)
-        rr = Rotate(quaternion_to_matrix(quat_gt), dtype=torch.float32)
-        t = Transform3d().compose(tr).compose(rr).compose(tr_r)
-        pc = t.transform_points(pc)#.to(torch.float).to(device)
+        #random_radian = (torch.rand(1) ) * 2 * torch.pi
+        #quat_gt = y_axis_rotation_quaternion_from_rad(random_radian) 
+        #quat_gt = torch.squeeze(quat_gt, dim=0)
+
+        quat_gt = torch.randn(4)
+        quat_gt[1] = 0
+        quat_gt[3] = 0
+        quat_gt = quat_gt / quat_gt.norm(dim=-1, keepdim=True)
+
+
+
+        #r = Rotate(quaternion_to_matrix(quat_gt), dtype=torch.float32)
+        #t = Transform3d().compose(rr)
+        #pc = t.transform_points(pc)#.to(torch.float).to(device)
 
         
+        _mean = torch.mean(pc, axis=0)
+        tr = Translate(-_mean[0],-_mean[1],-_mean[2], dtype=torch.float32)
+        tr_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32)
+        rr = Rotate(quaternion_to_matrix(quat_gt), dtype=torch.float32)
+        pc = Transform3d().compose(tr).transform_points(pc)
+        pc = Transform3d().compose(rr).transform_points(pc)
+        pc = Transform3d().compose(tr_r).transform_points(pc)
+
         return pc.cpu().numpy().reshape(P, N, 3), quat_gt.cpu().numpy()
 
     
@@ -309,18 +275,31 @@ class GeometryLatentDataset(Dataset):
         num_parts = data_dict['num_parts']
         part_pcs_gt = data_dict['part_pcs_gt']
         
+        #print("part_pcs_gt=============================")
+        #for i in range(num_parts):
+        #    print(i,part_pcs_gt[i][:3,:])
+
         ref_part = data_dict['ref_part']
+        #for i in range(num_parts):
+        #    print(i,np.mean(part_pcs_gt[i], axis=0))
         if self.rotation_1d:
             part_pcs_final, pose_gt_r = self._rotate_whole_part(part_pcs_gt)
         else:
             part_pcs_final, pose_gt_r = self._rotate_whole_part_xyz(part_pcs_gt)
+        #for i in range(num_parts):
+        #    print(i,np.mean(part_pcs_final[i], axis=0))
         part_pcs_final, pose_gt_t = self._recenter_ref(part_pcs_final, ref_part)
-        
+        #for i in range(num_parts):
+        #    print(i,np.mean(part_pcs_final[i], axis=0))
+        #print('pose_gt_t',pose_gt_t)
+        #print('pose_gt_r',pose_gt_r)
+        #print('ref_part',ref_part)
         cur_pts, cur_quat, cur_trans = [], [], []
         
         for i in range(num_parts):
             pc = part_pcs_final[i]
             pc, gt_trans = self._recenter_pc(pc)
+            
             if self.rotation_1d:
                 pc, gt_quat = self._rotate_pc(pc)
             else:
@@ -329,7 +308,12 @@ class GeometryLatentDataset(Dataset):
             cur_quat.append(gt_quat)
             cur_trans.append(gt_trans)
             cur_pts.append(pc)
-                        
+            #print(i,gt_trans,gt_quat)
+
+        #print("gt=============================")
+        #for i in range(num_parts):
+        #    print(i,cur_pts[i][:3,:])
+
         cur_pts = self._pad_data(np.stack(cur_pts, axis=0)).astype(np.float32)  # [P, N, 3]
         cur_quat = self._pad_data(np.stack(cur_quat, axis=0)).astype(np.float32)  # [P, 4]
         cur_trans = self._pad_data(np.stack(cur_trans, axis=0)).astype(np.float32)  # [P, 3]

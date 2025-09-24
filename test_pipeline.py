@@ -13,7 +13,7 @@ from puzzlefusion_plusplus.vqvae.dataset.dataset import build_geometry_dataloade
 import os
 import numpy as np
 from tqdm import tqdm
-
+import zipfile
 if torch.cuda.is_available():
     device = torch.device("cuda:0")
     torch.cuda.set_device(device)
@@ -22,18 +22,12 @@ else:
 
 #torch.nn.parallel.DistributedDataParallel.no_sync()
 #torch._dynamo.config.optimize_ddp = False
-
-
 import puzzlefusion_plusplus.vqvae.dataset.dataset
-importlib.reload(puzzlefusion_plusplus.vqvae.dataset.dataset)
 from puzzlefusion_plusplus.vqvae.dataset.dataset import GeometryPartDataset
 import render_inference_result
-
 from puzzlefusion_plusplus.denoiser.dataset.dataset import build_test_dataloader
 from puzzlefusion_plusplus.auto_aggl import AutoAgglomerative
-
 import obj_2_pcd
-importlib.reload(obj_2_pcd)
 
 
 def load_cfg(config_dir):
@@ -119,16 +113,26 @@ def _gen_pc_data(cfg, loader, data_type):
         # print(f"Saved {data_id:05}.npz in {data_type} data.")
 
 
+import trimesh
+def get_obj_from_testdataset(data_type,data_id,tiff_dir,tiff_dir_root,obj_dir_root,render_output_dir):
+    # get from test data
+    obj_files = []
+    glb_dir = f'/data/jhahn/data/shape_dataset/data/{data_type}/{data_id}/fractured_0'
+    os.makedirs(f'{obj_dir_root}/test/fractured', exist_ok=True)
+    for f in os.listdir(glb_dir):
+        _id = int(f.split(".")[-2])
+        #shutil.copyfile(f'{tiff_dir}/{_id}.tif', f'{tiff_dir_root}/{_id}.tif')    
+        shutil.copyfile(f'{glb_dir}/{f}', f'{obj_dir_root}/test/fractured/{f}')
+        _glb = trimesh.load(f'{obj_dir_root}/test/fractured/{f}')
+        _new_obj_filename = render_output_dir+"/objs/"+f.replace(".glb",".obj")
+        _glb.export(_new_obj_filename)
+        print(_new_obj_filename)
+        obj_files.append(_new_obj_filename)
+    print(f"combining {len(obj_files)} files")
+    slice_util.combine_obj_files(obj_files, render_output_dir+f"/gt_{data_id}.obj")
 
-
-def tiff_2_obj(cfg, tiff_dir_root, tickness,  obj_dir_root, pc_dir_root, num_of_missing_slices, no_gap_between_slices, is_curvature):
+def obj_2_pc(cfg,   obj_dir_root, pc_dir_root):
         
-
-#( args.tiff_dir_root, data_ids, tickness, num_of_missing_slices,  args.obj_dir_root, no_gap_between_slices, from_index, to_index, max_num_of_slices)
-    obj_dir_list_relative = obj_2_pcd.tiff_2_obj_parallel_test_mode(tiff_dir_root, None, tickness, num_of_missing_slices, 
-                                                          obj_dir_root, no_gap_between_slices = no_gap_between_slices, is_curvature = is_curvature)
-    
-
     with open(obj_dir_root+"/test.txt",'w') as f:
         #f.write(obj_dir_list_relative[0])
         f.write("test\n")
@@ -172,10 +176,10 @@ def tiff_2_obj(cfg, tiff_dir_root, tickness,  obj_dir_root, pc_dir_root, num_of_
 
     _gen_pc_data(cfg, test_loader, 'test')
 
-    return obj_dir_list_relative
+    #return obj_dir_list_relative
 
 
-def inference(cfg, pc_dir_root, obj_dir_list_relative, ckpt_path, inference_dir_root):       
+def inference(cfg, pc_dir_root, ckpt_path, inference_dir_root):       
     
 
     with open_dict(cfg):
@@ -222,13 +226,42 @@ def inference(cfg, pc_dir_root, obj_dir_list_relative, ckpt_path, inference_dir_
 
     # initialize trainer
     trainer = pl.Trainer(accelerator=cfg.accelerator, devices=1, max_epochs=1, logger=False)
-    
+    print(trainer)
     # start inference
-    trainer.test(model=model, dataloaders=test_loader)
+    r = trainer.test(model=model, dataloaders=test_loader)
     
+    print("test done",r)
 
+def zip_and_download_folder(folder_path):
+    """
+    폴더를 .zip 파일로 압축하고, 다운로드 링크를 생성합니다.
+    """
+    # 폴더가 존재하지 않으면 에러 메시지 출력
+    if not os.path.exists(folder_path):
+        print(f"오류: 폴더 '{folder_path}'가 존재하지 않습니다.")
+        return
 
-def render(inference_dir_root, obj_id_list ,vertices, render_output_dir):
+    # 압축 파일 이름 설정
+    zip_file_name = f"{folder_path}.zip"
+
+    # 폴더를 .zip 파일로 압축
+    print(f"폴더 '{folder_path}' 압축 중...")
+    with zipfile.ZipFile(zip_file_name, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        for root, dirs, files in os.walk(folder_path):
+            for file in files:
+                file_path = os.path.join(root, file)
+                # zip 파일 내의 경로 설정
+                arcname = os.path.relpath(file_path, os.path.join(folder_path, os.pardir))
+                zipf.write(file_path, arcname)
+
+    print(f"'{zip_file_name}' 압축 완료.")
+
+    # 다운로드 링크 생성 및 표시
+    
+    print("위 링크를 클릭하여 다운로드하세요.")
+    return zip_file_name
+
+def render(inference_dir_root, obj_id_list ,part_pcs_gt, render_output_dir):
         
     result_dir_list = []
     for f in os.listdir(inference_dir_root):
@@ -240,9 +273,10 @@ def render(inference_dir_root, obj_id_list ,vertices, render_output_dir):
     _result_dir = result_dir_list[0]
 
     
-    render_inference_result.gt_img(device, vertices, _result_dir, render_output_dir, obj_id_list)
+    render_inference_result.gt_img(device, part_pcs_gt, _result_dir, render_output_dir, obj_id_list)
 
-    render_inference_result.make_video(device, vertices, _result_dir,render_output_dir , obj_id_list)
+    render_inference_result.make_video(device, part_pcs_gt, _result_dir,render_output_dir , obj_id_list)
+
 from chamferdist import ChamferDistance
 
 def eval(vertices_gt,inference_dir_root, render_output_dir):

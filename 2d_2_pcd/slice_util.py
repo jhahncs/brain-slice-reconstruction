@@ -326,33 +326,6 @@ def quaternion_to_matrix(quaternions: torch.Tensor) -> torch.Tensor:
 
 
 
-def random_rotation(pc, angle = None):
-    """Rotate point cloud by random angle around a random axis"""
-
-
-    #P, N, _ = pc.shape
-    pc = pc.reshape(-1, 3)
-    #pc, guat_gt = _rotate_pc(pc)
-    
-
-    pc = torch.from_numpy(pc).float()
-
-    _mean = torch.mean(pc, axis=0)
-    tr = Translate(-_mean[0],-_mean[1],-_mean[2], dtype=torch.float32)
-    tr_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32)
-
-    if angle is None:
-        quat_gt = torch.tensor([torch.rand(1),0,1,0])
-    else:
-        quat_gt = torch.tensor([angle,0,1,0])
-    quat_gt = normalize(quat_gt, p=1.0, dim = 0)
-    rr = Rotate(quaternion_to_matrix(quat_gt), dtype=torch.float32)
-    t = Transform3d().compose(tr).compose(rr).compose(tr_r)
-    pc = t.transform_points(pc)#.to(torch.float).to(device)
-
-    
-    return pc.cpu().numpy(), quat_gt.cpu().numpy()
-
     
 def random_translation(points, max_translation=0.1):
     """Translate point cloud by random vector"""

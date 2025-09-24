@@ -31,10 +31,18 @@ from utils.node_merge_utils import (
     remove_intersect_points_and_fps_ds,
     extract_final_pred_trans_rots
 )
-
+from puzzlefusion_plusplus.denoiser.evaluation.transform import (
+    transform_pc,
+    quaternion_to_euler,
+    quaternion_to_matrix,
+    rotate_y_axis,
+    get_euler_angles_from_quaternion,
+    y_axis_rotation_quaternion_from_rad,
+)
 class AutoAgglomerative(pl.LightningModule):
     def __init__(self, cfg):
-        super(AutoAgglomerative, self).__init__()
+        #super(AutoAgglomerative,self).__init__()
+        super().__init__()
         self.cfg = cfg
         self.denoiser = DenoiserTransformer(cfg.denoiser)
         if cfg.verifier.max_iters > 1:
@@ -74,14 +82,26 @@ class AutoAgglomerative(pl.LightningModule):
         """
         noise_quat = noise_params[..., 3:]
         noise_quat = noise_quat / noise_quat.norm(dim=-1, keepdim=True)
-        part_pcs = transforms.quaternion_apply(noise_quat.unsqueeze(2), part_pcs)
-        
+        #part_pcs = transforms.quaternion_apply(noise_quat.unsqueeze(2), part_pcs)
+        part_pcs = rotate_y_axis(noise_quat, part_pcs)
         return part_pcs
     
+    def _apply_rots_xyz(self, part_pcs, noise_params):
+        """
+        Apply Noisy rotations to all points
+        """
+        noise_quat = noise_params[..., 3:]
+        noise_quat = noise_quat / noise_quat.norm(dim=-1, keepdim=True)
+        part_pcs = transforms.quaternion_apply(noise_quat.unsqueeze(2), part_pcs)
+
+        return part_pcs
 
     def _extract_features(self, part_pcs, part_valids, noisy_trans_and_rots):
         B, P , _, _ = part_pcs.shape
-        part_pcs = self._apply_rots(part_pcs, noisy_trans_and_rots)
+        if self.rotation_1d:
+            part_pcs = self._apply_rots(part_pcs, noisy_trans_and_rots)
+        else:
+            part_pcs = self._apply_rots_xyz(part_pcs, noisy_trans_and_rots)
         part_pcs = part_pcs[part_valids.bool()]
 
         encoder_out = self.encoder.encode(part_pcs)
@@ -92,32 +112,50 @@ class AutoAgglomerative(pl.LightningModule):
         xyz[part_valids.bool()] = encoder_out["xyz"]
         return latent, xyz
 
-    
+    def random_rotation_tensor(self, gt_rots):
+        tensor_shape = (gt_rots.shape[0], gt_rots.shape[1], 1)
+        arr_tensor = (2 * torch.rand(tensor_shape) - 1) * 2 * torch.pi      
+        arr_tensor = arr_tensor.to(gt_rots.device)  
+        noise_rotate = y_axis_rotation_quaternion_from_rad(arr_tensor).to(gt_rots.device)  
+        noise_rotate = torch.squeeze(noise_rotate, dim=2)
+
+        return noise_rotate
+
     def test_denoiser_only(self, data_dict):
         gt_trans = data_dict['part_trans']
         gt_rots = data_dict['part_rots']
         gt_trans_and_rots = torch.cat([gt_trans, gt_rots], dim=-1)
-        noisy_trans_and_rots = torch.randn(gt_trans_and_rots.shape, device=self.device)
+
+
+        noisy_trans_and_rots = torch.randn(gt_trans_and_rots.shape, device=self.device) 
+        
+        #noise_trans = torch.randn(gt_trans.shape, device=self.device)
+        #noise_rotate = self.random_rotation_tensor(gt_rots)
+        #noisy_trans_and_rots = torch.cat([noise_trans, noise_rotate], dim=-1)
+
+
+        
         ref_part = data_dict["ref_part"]        
 
         reference_gt_and_rots = torch.zeros_like(gt_trans_and_rots, device=self.device)
         reference_gt_and_rots[ref_part] = gt_trans_and_rots[ref_part]
 
         noisy_trans_and_rots[ref_part] = reference_gt_and_rots[ref_part]
-
+        
         if self.rotation_1d:
             reference_gt_and_rots[...,4] = torch.repeat_interleave(torch.Tensor([0]), reference_gt_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
-            reference_gt_and_rots[...,5] = torch.repeat_interleave(torch.Tensor([1]), reference_gt_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+            #reference_gt_and_rots[...,5] = torch.repeat_interleave(torch.Tensor([1]), reference_gt_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
             reference_gt_and_rots[...,6] = torch.repeat_interleave(torch.Tensor([0]), reference_gt_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
             noisy_trans_and_rots[...,4] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
-            noisy_trans_and_rots[...,5] = torch.repeat_interleave(torch.Tensor([1]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+            #noisy_trans_and_rots[...,5] = torch.repeat_interleave(torch.Tensor([1]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
             noisy_trans_and_rots[...,6] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
-
+        
 
 
         part_valids = data_dict['part_valids'].clone()
         part_scale = data_dict["part_scale"].clone()
         part_pcs = data_dict["part_pcs"].clone()
+
 
         all_pred_trans_rots = []
         for t in self.noise_scheduler.timesteps:
@@ -132,16 +170,17 @@ class AutoAgglomerative(pl.LightningModule):
                 part_scale,
                 ref_part
             )
+            
             if self.rotation_1d:
                 pred_noise[...,4] = torch.repeat_interleave(torch.Tensor([0]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)
-                pred_noise[...,5] = torch.repeat_interleave(torch.Tensor([1]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)
+                #pred_noise[...,5] = torch.repeat_interleave(torch.Tensor([1]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)
                 pred_noise[...,6] = torch.repeat_interleave(torch.Tensor([0]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)
-
+            
             noisy_trans_and_rots = self.noise_scheduler.step(pred_noise, t, noisy_trans_and_rots).prev_sample
             noisy_trans_and_rots[ref_part] = reference_gt_and_rots[ref_part]  
             if self.rotation_1d:
                 noisy_trans_and_rots[...,4] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
-                noisy_trans_and_rots[...,5] = torch.repeat_interleave(torch.Tensor([1]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+                #noisy_trans_and_rots[...,5] = torch.repeat_interleave(torch.Tensor([1]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
                 noisy_trans_and_rots[...,6] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
 
             all_pred_trans_rots.append(noisy_trans_and_rots.detach().cpu().numpy())
@@ -152,18 +191,42 @@ class AutoAgglomerative(pl.LightningModule):
 
         expanded_part_scale = data_dict["part_scale"].unsqueeze(-1).expand(-1, -1, 1000, -1)
         pts = pts * expanded_part_scale
-
-        acc, _, _ = calc_part_acc(pts, trans1=pred_trans, trans2=gt_trans,
-                            rot1=pred_rots, rot2=gt_rots, valids=data_dict['part_valids'], 
+        all_pred_trans_rots = np.array(all_pred_trans_rots)
+        '''
+        print("trans")
+        for step in range(20):
+            for part_idx in range(10):
+                __gt_trans = [f"{x:.3f}" for x in gt_trans[0][part_idx].cpu().tolist()]
+                
+                __pred_trans = [f"{x:.3f}" for x in all_pred_trans_rots[step][0][part_idx][:3]]
+                print(step, part_idx,__gt_trans , __pred_trans)
+        print("rots")
+        for step in range(20):
+            for part_idx in range(10):
+                __gt_rots= [f"{x:.1f}" for x in get_euler_angles_from_quaternion(gt_rots[0][part_idx].cpu().tolist())]
+                __pred_trans = [f"{x:.1f}" for x in get_euler_angles_from_quaternion(all_pred_trans_rots[step][0][part_idx][3:])]
+                print(step, part_idx,__gt_rots , __pred_trans)
+        '''
+        #pred_trans = torch.from_numpy(all_pred_trans_rots[t][..., :3]).to(pts.device)
+        #pred_rots = torch.from_numpy(all_pred_trans_rots[t][..., 3:]).to(pts.device)
+        acc, _, _ = calc_part_acc(pts,
+                            trans1=pred_trans, trans2=gt_trans,
+                            rot1=pred_rots, rot2=gt_rots, 
+                            valids=data_dict['part_valids'], 
                             chamfer_distance=self.metric)
         
+
+
+        
+
+
+    
         shape_cd = calc_shape_cd(pts, trans1=pred_trans, trans2=gt_trans,
                             rot1=pred_rots, rot2=gt_rots, valids=data_dict['part_valids'], 
                             chamfer_distance=self.metric)
         
         rmse_r = rot_metrics(pred_rots, gt_rots, data_dict['part_valids'], 'rmse')
         rmse_t = trans_metrics(pred_trans, gt_trans,  data_dict['part_valids'], 'rmse')
-
 
         self.acc_list.append(acc)
         self.rmse_r_list.append(rmse_r)
@@ -174,6 +237,7 @@ class AutoAgglomerative(pl.LightningModule):
 
 
     def test_step(self, data_dict, idx):
+        
         if self.cfg.verifier.max_iters == 1:
             self.test_denoiser_only(data_dict)
             return
@@ -187,7 +251,7 @@ class AutoAgglomerative(pl.LightningModule):
         reference_gt_and_rots = torch.zeros_like(gt_trans_and_rots, device=self.device)
         reference_gt_and_rots[ref_part] = gt_trans_and_rots[ref_part]
         noisy_trans_and_rots[ref_part] = reference_gt_and_rots[ref_part]
-
+        '''
         if self.rotation_1d:
             reference_gt_and_rots[...,4] = torch.repeat_interleave(torch.Tensor([0]), reference_gt_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
             reference_gt_and_rots[...,5] = torch.repeat_interleave(torch.Tensor([1]), reference_gt_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
@@ -197,7 +261,7 @@ class AutoAgglomerative(pl.LightningModule):
             noisy_trans_and_rots[...,4] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
             noisy_trans_and_rots[...,5] = torch.repeat_interleave(torch.Tensor([1]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
             noisy_trans_and_rots[...,6] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
-
+        '''
         part_valids = data_dict['part_valids'].clone()
         part_scale = data_dict["part_scale"].clone()
         part_pcs = data_dict["part_pcs"].clone()

@@ -40,7 +40,6 @@ def main(cfg):
 
     # initialize logger
     logger = hydra.utils.instantiate(cfg.logger)
-
     # initialize callbacks
     callbacks = init_callbacks(cfg)
     
@@ -50,6 +49,7 @@ def main(cfg):
         logger=logger,
         **cfg.trainer
     )
+
 
     # check the checkpoint
     if cfg.ckpt_path is not None:

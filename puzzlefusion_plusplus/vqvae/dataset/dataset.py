@@ -45,7 +45,7 @@ class GeometryPartDataset(Dataset):
         self.max_num_part = max_num_part  # ignore shapes with more parts
         self.shuffle_parts = shuffle_parts  # shuffle part orders
         self.rot_range = rot_range  # rotation range in degree
-
+        
         # list of fracture folder path
         self.data_list = self._read_data(data_fn)
         if overfit > 0:
@@ -69,7 +69,7 @@ class GeometryPartDataset(Dataset):
         print(len(mesh_list), mesh_list[:10])
         for mesh in mesh_list:
             mesh_dir = os.path.join(self.data_dir, mesh)
-            #print(mesh_dir)
+            print('mesh_dir',mesh_dir)
             if not os.path.isdir(mesh_dir):
                 print(f'{mesh} does not exist')
                 continue

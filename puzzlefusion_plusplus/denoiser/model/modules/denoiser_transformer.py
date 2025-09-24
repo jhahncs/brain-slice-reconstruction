@@ -4,12 +4,13 @@ from torch.nn import functional as F
 from utils.model_utils import (
     PositionalEncoding,
     EmbedderNerf
+)
 
 from puzzlefusion_plusplus.denoiser.evaluation.transform import (
     transform_pc,
     quaternion_to_euler,
+
     quaternion_to_matrix,
-    rotate_y_axis,
     y_axis_rotation_quaternion_from_rad
 )
 from puzzlefusion_plusplus.denoiser.model.modules.attention import EncoderLayer
@@ -28,7 +29,7 @@ class DenoiserTransformer(nn.Module):
     def __init__(self, cfg):
         super(DenoiserTransformer, self).__init__()
         self.cfg = cfg
-
+        self.rotation_1d = True
         self.model_channels = cfg.model.embed_dim
         self.out_channels = cfg.model.out_channels
         self.num_layers = cfg.model.num_layers
@@ -100,6 +101,7 @@ class DenoiserTransformer(nn.Module):
         self.pos_encoding = PositionalEncoding(self.model_channels)
 
         # mlp out for translation N, 256 -> N, 3
+
         self.mlp_out_trans = nn.Sequential(
             nn.Linear(self.model_channels, self.model_channels),
             nn.SiLU(),
@@ -110,19 +112,38 @@ class DenoiserTransformer(nn.Module):
 
         #self.hardtanh = nn.Hardtanh(min_val=-300, max_val=300)
         # mlp out for rotation N, 256 -> N, 4
-        self.mlp_out_rot = nn.Sequential(
-            nn.Linear(self.model_channels, self.model_channels),
-            nn.SiLU(),
-            nn.Linear(self.model_channels, self.model_channels // 2),
-            nn.SiLU(),
-            nn.Linear(self.model_channels // 2, 1) ,
-            nn.Tanh(),
-            Lambda(lambda x: x * torch.pi * 2)
+        if self.rotation_1d:
+            self.mlp_out_rot = nn.Sequential(
 
-            #nn.Hardtanh(min_val=-300, max_val=300)
-              # jhahn
-        )
 
+                nn.Linear(self.model_channels, self.model_channels),
+                nn.SiLU(),
+                nn.Linear(self.model_channels, self.model_channels // 2),
+                nn.SiLU(),
+                nn.Linear(self.model_channels // 2, 2)
+    
+            )
+        else:
+            self.mlp_out_rot = nn.Sequential(
+
+
+                nn.Linear(self.model_channels, self.model_channels),
+                nn.SiLU(),
+                nn.Linear(self.model_channels, self.model_channels // 2),
+                nn.SiLU(),
+                nn.Linear(self.model_channels // 2, 4)
+    
+            )
+            
+        '''
+        nn.Linear(self.model_channels, self.model_channels),
+        #nn.SiLU(),
+        nn.Linear(self.model_channels, self.model_channels // 2),
+        #nn.SiLU(),
+        nn.Linear(self.model_channels // 2, 1) ,
+        nn.Sigmoid(),
+        Lambda(lambda x: x * torch.pi * 2),
+            '''
 
     # def _gen_mask(self, L, N, B, mask):
     #     self_block = torch.ones(L, L, device=mask.device)  # Each L points should talk to each other
@@ -154,76 +175,26 @@ class DenoiserTransformer(nn.Module):
 
         x_emb = self.param_fc(self.param_embedding(x))
         return x_emb, shape_emb
-    @staticmethod
-    def y_axis_rotation_quaternion_from_rad(angle_radians):
-        """
-        y축 회전각(라디안)에 대한 쿼터니언 텐서를 생성합니다.
-        
-        Args:
-            angle_radians (torch.Tensor): 회전 각도를 담은 스칼라 또는 배치 텐서.
-                                        단위는 라디안.
-        Returns:
-            torch.Tensor: [x, y, z, w] 형식을 따르는 쿼터니언 텐서.
-        """
-        # 1. 반각(half-angle) 계산
-        half_angle = angle_radians / 2.0
-        
-        # 2. 사인, 코사인 값 계산
-        sin_half_angle = torch.sin(half_angle)
-        cos_half_angle = torch.cos(half_angle)
-
-        # 3. 차원 확장 및 쿼터니언 텐서 생성
-        #    .unsqueeze(-1)로 차원을 확장하여 배치 처리 가능하게 함
-        sin_half_angle = sin_half_angle.unsqueeze(-1)
-        cos_half_angle = cos_half_angle.unsqueeze(-1)
-        
-        # 쿼터니언의 x, z 성분은 0이므로, 0으로 채워진 텐서를 생성
-        zeros = torch.zeros_like(sin_half_angle)
-        
-        # [x, y, z, w] 순서로 텐서를 결합 (concatenate)
-        #quaternion = torch.cat([zeros, sin_half_angle, zeros, cos_half_angle], dim=-1)
-        quaternion = torch.cat([cos_half_angle, zeros, sin_half_angle, zeros ], dim=-1)
-        
-        return quaternion
+    
     def _out(self, data_emb, B, N, L):
         out = data_emb.reshape(B, N, L, self.model_channels)
 
         # Avg pooling
         out = out.mean(dim=2)
-
         trans = self.mlp_out_trans(out)
         rots = self.mlp_out_rot(out)
-
-        #rots = self.angle_2_quaternion(rots)
-        rots = y_axis_rotation_quaternion_from_rad(rots)
-        rots = torch.squeeze(rots, dim=2)
-
-        #print('rots',rots.shape)
-        # tanh 함수를 적용하여 출력 범위를 (-1, 1)로 제한
-        #tanh_output = self.tanh(rots)
-        
-        # (-1, 1) 범위의 값을 원하는 범위(-300, 300)로 스케일링
-        #scaled_output = tanh_output * 300
-
-        #print(rots.shape)
-        #print(rots[...,3])
-        #print(rots[...,3].shape)
-        #print('@@',torch.min(rots[...,3], axis=0))
-        '''
-        y_min = torch.min(torch.min(rots[...,3], axis=0)[0], axis=0)[0]
-        y_max = torch.max(torch.max(rots[...,3], axis=0)[0], axis=0)[0]
-        #print('y_min',y_min)
-        #print('y_max',y_max)
-        # Avoid division by zero if y_max and y_min are equal
-        if y_max != y_min:
-            rots[...,3] = ((rots[...,3] - y_min) / (y_max - y_min))*100
+        if self.rotation_1d:               
+            output_tensor = torch.zeros(rots.shape[0], rots.shape[1], 4, dtype=rots.dtype, device=rots.device)
+            output_tensor[:, :, 0] = rots[:, :, 0]
+            output_tensor[:, :, 2] = rots[:, :, 1]
+            return torch.cat([trans, output_tensor], dim=-1)
         else:
-            rots[...,3] = rots[...,3]  # or some default value if all outputs are the same
-        '''
 
+            #rots = torch.nn.functional.normalize(rots, p=2, dim=-1)
+            return torch.cat([trans, rots], dim=-1)
         
 
-        return torch.cat([trans, rots], dim=-1)
+        
 
 
     def _add_ref_part_emb(self, B, x_emb, ref_part):

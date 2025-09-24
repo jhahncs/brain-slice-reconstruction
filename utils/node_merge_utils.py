@@ -293,6 +293,7 @@ def get_param(param, nodes):
 
         if init_pose is not None:
             final_trans_rots = affine_matrix @ init_pose 
+            print("@@@@@@@@@@@@@@@@@@@",init_pose)
         else:
             final_trans_rots = affine_matrix
 

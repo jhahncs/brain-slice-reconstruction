@@ -4,7 +4,7 @@ import torch
 
 from .chamfer import chamfer_distance
 from .loss import _valid_mean
-from .transforms import transform_pc
+#from .transforms import transform_pc
 import pytorch3d.transforms as transforms
 from pytorch3d.transforms.transform3d import (
     Rotate,
@@ -317,74 +317,6 @@ def rot_metrics(rot1, rot2, valids, metric):
     metric_per_data = _valid_mean(metric_per_data, valids)
     return metric_per_data
 
-
-
-def get_euler_angles_from_quaternion(self,q, degrees=True):
-        """
-        (w, x, y, z) 쿼터니언에서 x, y, z 각 축의 회전 각도(Roll, Pitch, Yaw)를 계산합니다.
-        이 공식은 Z-Y-X 순서의 오일러 각을 가정합니다.
-        
-        Args:
-            q (tuple or list): 4개의 원소를 가진 쿼터니언 (w, x, y, z).
-            degrees (bool): 각도를 도로 반환할지 여부. 기본값은 True.
-        
-        Returns:
-            tuple: (roll, pitch, yaw) 튜플.
-        """
-        w = q[0]
-        x = q[1]
-        y = q[2]
-        z = q[3]
-
-        
-        # 쿼터니언 정규화 (안정성 확보)
-        norm = np.sqrt(w**2 + x**2 + y**2 + z**2)
-        if norm == 0:
-            return (0.0, 0.0, 0.0)
-            
-        w, x, y, z = w / norm, x / norm, y / norm, z / norm
-
-        # Roll (x축 회전) 계산
-        t0 = 2.0 * (w * x + y * z)
-        t1 = 1.0 - 2.0 * (x**2 + y**2)
-        roll_rad = math.atan2(t0, t1)
-        
-
-
-
-
-        # Pitch (y축 회전) 계산
-        t2 = 2.0 * (w * y - z * x)
-        # 짐벌 잠금 방지: t2 값이 -1.0과 1.0 사이로 벗어날 경우를 처리
-        t2 = 1.0 if t2 > 1.0 else t2
-        t2 = -1.0 if t2 < -1.0 else t2
-        pitch_rad = math.asin(t2)
-        
-
-
-
-
-        # Yaw (z축 회전) 계산
-        t3 = 2.0 * (w * z + x * y)
-        t4 = 1.0 - 2.0 * (y**2 + z**2)
-        yaw_rad = math.atan2(t3, t4)
-
-
-
-        
-        if degrees:
-            roll = np.degrees(roll_rad)
-            pitch = np.degrees(pitch_rad)
-            yaw = np.degrees(yaw_rad)
-            
-            # 0~360도 범위로 조정 (선택적)
-            # roll = roll % 360
-            # pitch = pitch % 360
-            # yaw = yaw % 360
-            
-            return (roll, pitch, yaw)
-        else:
-            return (roll_rad, pitch_rad, yaw_rad)
 
 
 def calculate_dice_score_from_point_clouds(self, pc1: np.ndarray, pc2: np.ndarray, resolution: int = 64) -> float:

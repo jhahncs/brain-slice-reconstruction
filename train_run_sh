@@ -1,8 +1,13 @@
 DATASET_NAME=0.003_HIP_CUR
+DATASET_NAME=WHOLE_atlas_10slices
+#DATASET_NAME=WHOLE_light_10slices
+DATASET_TYPE=atlas_mouse_brain_50mm
+#DATASET_TYPE=brain_lightsheet
+EXP_NAME=rot_y
 #cd /home/jhahn/puzzlefusion-plusplus/2d_2_pcd
 #python obj_2_pcd.py --obj_dir_root /data/jhahn/data/shape_dataset/data/brain_lightsheet --tiff_dir_root /data/jhahn/data/brain_lightsheet/slices 
 #cd /home/jhahn/puzzlefusion-plusplus
-#python generate_dataset_split.py --dataname ${DATASET_NAME} --obj_dir /data/jhahn/data/shape_dataset/data/brain_lightsheet --datalist_file_dir /data/jhahn/data/shape_dataset/data
+#python generate_dataset_split.py --dataname ${DATASET_NAME} --obj_dir /data/jhahn/data/shape_dataset/data/${DATASET_TYPE} --datalist_file_dir /data/jhahn/data/shape_dataset/data
 
 
 #python generate_pc_data.py +data.save_pc_data_path=/data/jhahn/data/shape_dataset/pc_data/${DATASET_NAME} data.data_fn="$DATASET_NAME.\{\}.txt" \
@@ -13,11 +18,11 @@ DATASET_NAME=0.003_HIP_CUR
 #ddp_find_unused_parameters_true
 
 python train_vqvae.py \
-    experiment_name=${DATASET_NAME}_pointnet \
+    experiment_name=${DATASET_NAME}_${EXP_NAME}_pointnet \
     data.batch_size=12 \
-    experiment_output_path=models/${DATASET_NAME}/autoencoder \
+    experiment_output_path=models/${DATASET_NAME}_${EXP_NAME}/autoencoder \
     data.val_batch_size=12 \
-    trainer.max_epochs=500\
+    trainer.max_epochs=300\
     +trainer.devices=2 \
     +trainer.strategy=ddp \
     data.data_fn="$DATASET_NAME.\{\}.txt" \
@@ -25,15 +30,16 @@ python train_vqvae.py \
     data.data_val_dir=/data/jhahn/data/shape_dataset/pc_data/${DATASET_NAME}/val/ \
     data.mesh_data_dir=/data/jhahn/data/shape_dataset/data
 
-python train_denoiser.py \
-    experiment_name=${DATASET_NAME}_denoiser \
+
+ python train_denoiser.py \
+    experiment_name=${DATASET_NAME}_${EXP_NAME}_denoiser \
     data.batch_size=12 \
     data.val_batch_size=12 \
-    trainer.max_epochs=1 \
-    experiment_output_path=models/${DATASET_NAME}/denoiser \
-    model.encoder_weights_path=models/${DATASET_NAME}/autoencoder/training/last.ckpt \
+    trainer.max_epochs=100 \
+    experiment_output_path=models/${DATASET_NAME}_${EXP_NAME}/denoiser \
+    model.encoder_weights_path=models/${DATASET_NAME}_${EXP_NAME}/autoencoder/training/last.ckpt \
     +trainer.devices=2 \
-    +trainer.strategy=ddp_find_unused_parameters_true \
+    +trainer.strategy=ddp \
     data.data_fn="$DATASET_NAME.\{\}.txt" \
     data.data_dir=/data/jhahn/data/shape_dataset/pc_data/${DATASET_NAME}/train/ \
     data.data_val_dir=/data/jhahn/data/shape_dataset/pc_data/${DATASET_NAME}/val/ \

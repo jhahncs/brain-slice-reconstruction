@@ -116,7 +116,7 @@ class PiecewiseScheduler(DDPMScheduler):
         #print('prev_sample',prev_sample[0,:3,3:])
         # 3. 마지막으로, step 함수의 출력 형식을 맞춥니다.
         # Diffusers 라이브러리에서 사용하는 DDPMSchedulerOutput 객체를 반환합니다.
-        return 
+        return prev_sample
     '''
     '''
     def add_noise(
@@ -166,7 +166,7 @@ class PiecewiseScheduler(DDPMScheduler):
         #print(sqrt_alpha_prod.device,original_samples.device, sqrt_one_minus_alpha_prod.device, custom_noise.device)
         noisy_samples = sqrt_alpha_prod * original_samples + sqrt_one_minus_alpha_prod * custom_noise
         #print('noisy_samples',noisy_samples[0,1,3:])
-
+        #noisy_samples = noisy_samples*(2 * torch.pi)
         #import System
         #System.exit(1)
         return noisy_samples

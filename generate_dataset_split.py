@@ -4,12 +4,11 @@ import numpy as np
 import os
 import shutil
 import argparse
-
-
+from exp_util import ExpInfo
 
 if __name__ == "__main__":
 
-
+    '''
 
     parser = argparse.ArgumentParser(
         description="convert tiff to obj",
@@ -29,16 +28,35 @@ if __name__ == "__main__":
     #dataname = '0.001_10_HIP_CUR'
     datalist_file_dir = args.datalist_file_dir
     dir = args.obj_dir  
+    '''
+    date_type = 'atlas_mouse_brain_50mm'
+    date_type = 'brain_lightsheet'
+    
+    dataname = 'WHOLE_light_10slices'
+    dir = f'/data/jhahn/data/shape_dataset/data/{date_type}'
+    datalist_file_dir = '/data/jhahn/data/shape_dataset/data'
 
+
+    slice_angle_to_range_map = {}
+
+
+    slice_angle_to_range_map['sliced_on_1_0_0'] = (0,366)
+    slice_angle_to_range_map['sliced_on_1_0_1'] = (0,490)
+    slice_angle_to_range_map['sliced_on_0_0_1'] = (61,398)
+    slice_angle_to_range_map['sliced_on_1.0_1.0_0.0'] = (5,608)
+    slice_angle_to_range_map['sliced_on_0_1_1'] = (6,569)
+    slice_angle_to_range_map['sliced_on_0_1_0'] = (5,797)
+    slice_angle_to_range_map['sliced_on_1_1_0'] = (5,608)
+    slice_angle_to_range_map['sliced_on_1_1_1'] = (0,640)
 
 
     _dir_list = os.listdir(dir)
     _dir_list_filtered = []
 
-    tickness = '0.003'
+    tickness = '0.004'
     is_no_gap_between_slices = 'True'
     is_curvature = 'True'
-    num_of_missing_slices = "10"
+    num_of_missing_slices = "5"
     to_index = "700"
 
     '''
@@ -50,34 +68,30 @@ if __name__ == "__main__":
     for _dir in _dir_list:
         if not os.path.isdir(dir+"/"+_dir):
             continue
-        #print(_dir)
-        parts = _dir.split('_')
-        _cut_xyz = (parts[2], parts[3], parts[4])
-        _tickness = parts[5]
-        _is_no_gap_between_slices = parts[6]
-        _num_of_missing_slices = parts[7]
-        _begin_index = parts[8]
-        _is_curvature = parts[9]
-        _to_index = parts[10]
-        try:
-            _desc = parts[11]
-        except:
-            continue
-        if _tickness == tickness and _is_no_gap_between_slices == is_no_gap_between_slices \
-            and _is_curvature == is_curvature \
-            and  _desc == "HIP":
-            _dir_list_filtered.append(_dir)
 
+        exp_info = ExpInfo(_dir)
+        if exp_info.cut_y == 1 and exp_info.cut_y == 1 and exp_info.cut_y == 0:
+            slice_dirname = f'sliced_on_1.0_1.0_0.0'
+        else:
+            slice_dirname = f'sliced_on_{int(exp_info.cut_x)}_{int(exp_info.cut_y)}_{int(exp_info.cut_z)}'
+        if  exp_info.num_of_slices == 10:
+            _dir_list_filtered.append(_dir)
+            #print(slice_dirname, exp_info.num_of_slices)
+        
+        #if exp_info.start_data_id == slice_angle_to_range_map[slice_dirname][0] and exp_info.end_data_id == slice_angle_to_range_map[slice_dirname][1]-1:
+        #    _dir_list_filtered.append(_dir)
+    
     #data_name = f'{tickness}_{is_no_gap_between_slices}_{is_curvature}_{num_of_missing_slices}'
     #print(data_name)
-    #_dir_list_filtered = _dir_list 
+    _dir_list_filtered = _dir_list 
     # 그룹 비율을 설정합니다 (총합이 1이 되어야 합니다).
-    group_ratios = [0.80, 0.1, 0.1] 
+    print(len(_dir_list_filtered))
+    random.shuffle(_dir_list_filtered)
+    _dir_list_filtered = _dir_list_filtered[:1500]
+    group_ratios = [0.8, 0.1, 0.1] 
 
     # 폴더 목록을 무작위로 섞습니다.
-    #_dir_list_filtered = _dir_list_filtered[:2000]
-    random.shuffle(_dir_list_filtered)
-    print(len(_dir_list_filtered))
+    
 
     # 총 폴더 수를 계산합니다.
     total_folders = len(_dir_list_filtered)
@@ -96,10 +110,16 @@ if __name__ == "__main__":
     print(f"📂 그룹 2 ({len(group2)}개, {group_ratios[1]*100:.0f}%):", group2[:2])
     print(f"📂 그룹 3 ({len(group3)}개, {group_ratios[2]*100:.0f}%):", group3[:2])
 
+
+    
+    
     for data_type, data in [('train',group1),('test',group2),('val',group3)]:
         output_file_name = f'{datalist_file_dir}/{dataname}.{data_type}.txt'
         print(output_file_name)
         with open(output_file_name,"w") as output_file:
                     
             for f in sorted(data):
-                output_file.write(f'brain_lightsheet/{f}\n')
+                output_file.write(f'{date_type}/{f}\n')
+                #output_file.write(f'brain_lightsheet/{f}\n')
+    
+    

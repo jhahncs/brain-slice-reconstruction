@@ -114,7 +114,7 @@ def calc_part_acc(pts, trans1, trans2, rot1, rot2, valids, chamfer_distance):
     acc_per_part = (loss_per_data < thre) & (valids == 1)
     # the official code is doing avg per-shape acc (not per-part)
     acc = acc_per_part.sum(-1) / (valids == 1).sum(-1)
-    return acc, acc_per_part, loss_per_data
+    return acc, acc_per_part, loss_per_data#, pts1, pts2
 
 
 @torch.no_grad()
