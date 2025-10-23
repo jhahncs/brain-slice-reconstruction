@@ -138,7 +138,7 @@ def obj_2_pc(cfg,   obj_dir_root, pc_dir_root):
         f.write("test\n")
 
     
-
+    
     data_dict = dict(
         data_dir=obj_dir_root,
         data_fn= "test.txt",
@@ -261,7 +261,7 @@ def zip_and_download_folder(folder_path):
     print("위 링크를 클릭하여 다운로드하세요.")
     return zip_file_name
 
-def render(inference_dir_root, obj_id_list ,part_pcs_gt, render_output_dir):
+def render(inference_dir_root, obj_id_list ,part_pcs_gt, original_vertices,render_output_dir):
         
     result_dir_list = []
     for f in os.listdir(inference_dir_root):
@@ -273,9 +273,9 @@ def render(inference_dir_root, obj_id_list ,part_pcs_gt, render_output_dir):
     _result_dir = result_dir_list[0]
 
     
-    render_inference_result.gt_img(device, part_pcs_gt, _result_dir, render_output_dir, obj_id_list)
+    render_inference_result.gt_img(device, part_pcs_gt,original_vertices, _result_dir, render_output_dir, obj_id_list)
 
-    render_inference_result.make_video(device, part_pcs_gt, _result_dir,render_output_dir , obj_id_list)
+    render_inference_result.make_video(device, part_pcs_gt,original_vertices, _result_dir,render_output_dir , obj_id_list)
 
 from chamferdist import ChamferDistance
 

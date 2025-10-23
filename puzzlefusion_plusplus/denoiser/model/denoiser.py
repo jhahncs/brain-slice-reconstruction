@@ -173,8 +173,10 @@ class Denoiser(pl.LightningModule):
 
         
         if self.rotation_1d:
-            noise[...,4] = torch.repeat_interleave(torch.Tensor([0]), noise.shape[-2], dim=0).unsqueeze(dim=0)
-            noise[...,6] = torch.repeat_interleave(torch.Tensor([0]), noise.shape[-2], dim=0).unsqueeze(dim=0)
+            for _i in [4,6]: # 4, 6
+                noise[...,_i] = torch.repeat_interleave(torch.Tensor([0]), noise.shape[-2], dim=0).unsqueeze(dim=0)
+            #noise[...,3] = torch.repeat_interleave(torch.Tensor([1]), noise.shape[-2], dim=0).unsqueeze(dim=0)
+
         
         B, P, N, C = data_dict["part_pcs"].shape
 
@@ -188,9 +190,9 @@ class Denoiser(pl.LightningModule):
         
         noisy_trans_and_rots[ref_part] = gt_trans_and_rots[ref_part]
         if self.rotation_1d:
-            noisy_trans_and_rots[...,4] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
-            #noisy_trans_and_rots[...,5] = torch.repeat_interleave(torch.Tensor([1]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
-            noisy_trans_and_rots[...,6] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+            for _i in [4,6]:
+                noisy_trans_and_rots[...,_i] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
+            #noisy_trans_and_rots[...,3] = torch.repeat_interleave(torch.Tensor([1]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
         '''
         if self.rotation_1d:
             noisy_trans_and_rots[...,4] = torch.repeat_interleave(torch.Tensor([0]), noisy_trans_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
@@ -225,10 +227,9 @@ class Denoiser(pl.LightningModule):
 
         
         if self.rotation_1d:
-            pred_noise[...,4] = torch.repeat_interleave(torch.Tensor([0]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)
-            #pred_noise[...,5] = torch.repeat_interleave(torch.Tensor([1]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)
-            pred_noise[...,6] = torch.repeat_interleave(torch.Tensor([0]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)
-        
+            for _i in [4,6]: # 4, 6
+                pred_noise[...,_i] = torch.repeat_interleave(torch.Tensor([0]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)        
+            #pred_noise[...,3] = torch.repeat_interleave(torch.Tensor([1]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)
         #pred_noise[ref_part]  = gt_trans_and_rots[ref_part]
 
         output_dict = {
@@ -237,18 +238,20 @@ class Denoiser(pl.LightningModule):
         }
 
 
-        '''
+        
         for b in range(output_dict['pred_noise'].shape[0]):
             _di = {}
             for p in [2]:
                 #print(self.get_euler_angles_from_quaternion(output_dict['pred_noise'][b,p,3:].detach().cpu().numpy()))
-                #_di[f'360_{b}_{p}_roll'] = get_euler_angles_from_quaternion(output_dict['pred_noise'][b,p,3:].detach().cpu().numpy())[0]
+                _di[f'360_{b}_{p}_roll'] = get_euler_angles_from_quaternion(output_dict['pred_noise'][b,p,3:].detach().cpu().numpy())[0]
                 _di[f'360_{b}_{p}_pitch'] = get_euler_angles_from_quaternion(output_dict['pred_noise'][b,p,3:].detach().cpu().numpy())[1]
-                #_di[f'360_{b}_{p}_yaw'] = get_euler_angles_from_quaternion(output_dict['pred_noise'][b,p,3:].detach().cpu().numpy())[2]
+                _di[f'360_{b}_{p}_yaw'] = get_euler_angles_from_quaternion(output_dict['pred_noise'][b,p,3:].detach().cpu().numpy())[2]
 
+                _di[f'gt360_{b}_{p}_roll'] = get_euler_angles_from_quaternion(output_dict['gt_noise'][b,p,3:].detach().cpu().numpy())[0]
                 _di[f'gt360_{b}_{p}_pitch'] = get_euler_angles_from_quaternion(output_dict['gt_noise'][b,p,3:].detach().cpu().numpy())[1]
-                gt360 = _di[f'gt360_{b}_{p}_pitch']
-                a360 = _di[f'360_{b}_{p}_pitch']
+                _di[f'gt360_{b}_{p}_yaw'] = get_euler_angles_from_quaternion(output_dict['gt_noise'][b,p,3:].detach().cpu().numpy())[2]
+                #gt360 = _di[f'gt360_{b}_{p}_pitch']
+                #a360 = _di[f'360_{b}_{p}_pitch']
 
                 #print(f'gt360_{b}_{p}_pitch : {gt360:.3f}')
                 #print(f'360_{b}_{p}_pitch : {a360:.3f}')
@@ -262,9 +265,14 @@ class Denoiser(pl.LightningModule):
             _di = {}
             for p in [2]:
                 _di[f'q_{b}_{p}_w'] = output_dict['pred_noise'][b,p,3]
-                _di[f'gtq_{b}_{p}_w'] = output_dict['gt_noise'][b,p,3]
+                _di[f'q_{b}_{p}_x'] = output_dict['pred_noise'][b,p,4]
                 _di[f'q_{b}_{p}_y'] = output_dict['pred_noise'][b,p,5]
+                _di[f'q_{b}_{p}_z'] = output_dict['pred_noise'][b,p,6]
+
+                _di[f'gtq_{b}_{p}_w'] = output_dict['gt_noise'][b,p,3]
+                _di[f'gtq_{b}_{p}_x'] = output_dict['gt_noise'][b,p,4]
                 _di[f'gtq_{b}_{p}_y'] = output_dict['gt_noise'][b,p,5]
+                _di[f'gtq_{b}_{p}_z'] = output_dict['gt_noise'][b,p,6]
                 #print(f'gtq_{b}_{p}_w : {output_dict["gt_noise"][b,p,3]:.3f}')
                 #print(f'q_{b}_{p}_w : {output_dict["pred_noise"][b,p,3]:.3f}')
                 #print(f'gtq_{b}_{p}_y : {output_dict["gt_noise"][b,p,5]:.3f}')
@@ -276,7 +284,7 @@ class Denoiser(pl.LightningModule):
             if True:
                 break
 
-        '''
+        
 
         return output_dict
 
@@ -360,7 +368,7 @@ class Denoiser(pl.LightningModule):
         for loss_name, loss_value in loss_dict.items():
             if self.rotation_1d:
                 if loss_name == 'mse_loss_rots':
-                    weight = idx*0.01
+                    weight = idx*0.1
                 else:
                     weight = 1
             total_loss += (weight*loss_value)
@@ -447,12 +455,12 @@ class Denoiser(pl.LightningModule):
                 ref_part
             )
             #print('pred_noise',pred_noise[0,0,3:])
-            '''
+            
             if self.rotation_1d:
                 pred_noise[...,4] = torch.repeat_interleave(torch.Tensor([0]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)
-                pred_noise[...,5] = torch.repeat_interleave(torch.Tensor([1]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)
+                #pred_noise[...,5] = torch.repeat_interleave(torch.Tensor([1]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)
                 pred_noise[...,6] = torch.repeat_interleave(torch.Tensor([0]), pred_noise.shape[-2], dim=0).unsqueeze(dim=0)
-            '''
+            
             #noisy_trans_and_rots_before = noisy_trans_and_rots.clone()
             #print('noisy_trans_and_rots',noisy_trans_and_rots[0,0,3:])
             noisy_trans_and_rots = self.noise_scheduler.step(pred_noise, t, noisy_trans_and_rots).prev_sample

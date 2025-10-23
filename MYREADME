@@ -20,7 +20,7 @@ python generate_pc_data.py +data.save_pc_data_path=/data/jhahn/data/shape_datase
 
 
 nohup  python train_denoiser.py \
-    experiment_name=${DATASET_NAME}_${EXP_NAME}_denoiser_1 \
+    experiment_name=${DATASET_NAME}_${EXP_NAME}_denoiser_trans \
     data.batch_size=12 \
     data.val_batch_size=12 \
     trainer.max_epochs=100 \

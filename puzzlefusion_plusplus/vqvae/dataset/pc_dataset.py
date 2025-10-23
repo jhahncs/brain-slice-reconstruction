@@ -120,7 +120,7 @@ class GeometryPartDataset(Dataset):
         #quat_gt = y_axis_rotation_quaternion_from_rad(random_radian) 
         #quat_gt = torch.squeeze(quat_gt, dim=0)
 
-        quat_gt = torch.randn(4)
+        quat_gt = torch.rand(4)
         quat_gt[...,1] = 0
         quat_gt[...,3] = 0
         quat_gt = quat_gt / quat_gt.norm(dim=-1, keepdim=True)
@@ -130,13 +130,13 @@ class GeometryPartDataset(Dataset):
         #pc = t.transform_points(pc)#.to(torch.float).to(device)
         
 
-        _mean = torch.mean(pc, axis=0)
-        tr = Translate(-_mean[0],-_mean[1],-_mean[2], dtype=torch.float32)
-        tr_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32)
+        #_mean = torch.mean(pc, axis=0)
+        #tr = Translate(-_mean[0],-_mean[1],-_mean[2], dtype=torch.float32)
+        #tr_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32)
         rr = Rotate(quaternion_to_matrix(quat_gt), dtype=torch.float32)
-        pc = Transform3d().compose(tr).transform_points(pc)
+        #pc = Transform3d().compose(tr).transform_points(pc)
         pc = Transform3d().compose(rr).transform_points(pc)
-        pc = Transform3d().compose(tr_r).transform_points(pc)
+        #pc = Transform3d().compose(tr_r).transform_points(pc)
 
 
 

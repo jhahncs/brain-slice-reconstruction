@@ -157,20 +157,25 @@ def _rotate_whole_part_xyz(pc,quat_gt, inverted = False):
     """
     pc: [P, N, 3]
     """
-    P, N, _ = pc.shape
-    pc = pc.reshape(-1, 3)
-    #rot_mat = R.random().as_matrix()
-    #print(rot_mat)
-    rot_mat = R.from_quat(quat_gt, scalar_first=True).as_matrix().T
-    if inverted:
-        rot_mat = rot_mat.T
-    #print(rot_mat)
-    #rot_mat = puzzle_transform.quaternion_to_matrix(quat_gt)
-    pc = (rot_mat @ pc.T).T
-    #quat_gt = R.from_matrix(rot_mat.T).as_quat()
-    # we use scalar-first quaternion
-    #quat_gt = quat_gt[[3, 0, 1, 2]]
-    return pc.reshape(P, N, 3)
+
+    if isinstance(pc, list):
+        rot_mat = R.from_quat(quat_gt, scalar_first=True).as_matrix().T
+        if inverted:
+            rot_mat = rot_mat.T
+        rot_mat = torch.from_numpy(rot_mat).float()
+        new_pc = []
+        for _part_idx, _part in enumerate(pc):
+            new_pc.append((rot_mat @ _part.T).T)
+        return new_pc
+    else:
+            
+        P, N, _ = pc.shape
+        pc = pc.reshape(-1, 3)
+        rot_mat = R.from_quat(quat_gt, scalar_first=True).as_matrix().T
+        if inverted:
+            rot_mat = rot_mat.T
+        pc = (rot_mat @ pc.T).T
+        return pc.reshape(P, N, 3)
 
 
 
@@ -184,15 +189,27 @@ def _recenter_ref(pc, ref_idx):
     pc = pc - centroid
     return pc
 
-def _recenter_centroid(pc, centroid):
+def _recenter_centroid(pc, centroid, inverted=False):
     """
     pc: [P, N, 3]
     """
-    P, N, _ = pc.shape
-    #ref_idx = np.where(ref_part)[0]
-    #centroid = np.mean(pc[ref_idx], axis=0)
-    pc = pc - centroid
-    return pc
+    if isinstance(pc, list):
+        new_pc = []
+        for _part_idx, _part in enumerate(pc):
+            if inverted:
+                new_pc.append(-_part - centroid)
+            else:
+                new_pc.append(_part - centroid)
+        return new_pc
+    else:
+
+        P, N, _ = pc.shape
+        #ref_idx = np.where(ref_part)[0]
+        #centroid = np.mean(pc[ref_idx], axis=0)
+        if inverted:
+            pc = -pc 
+        pc = pc - centroid
+        return pc
 
 
 def _recenter_pc( pc, centroid):
@@ -206,13 +223,18 @@ def _rotate_pc_xyz( pc, quat_gt, inverted = False):
     pc: [N, 3]
     """
 
-    #rot_mat = R.random().as_matrix()
-
     rot_mat = R.from_quat(quat_gt, scalar_first=True).as_matrix()
     if inverted:
         rot_mat = rot_mat.T
-    pc = (rot_mat @ pc.T).T
-    return pc
+
+    #rot_mat = R.random().as_matrix()
+    if isinstance(pc, torch.Tensor):
+        rot_mat = torch.from_numpy(rot_mat).float().to(pc.device)
+        pc = (rot_mat @ pc.T).T
+        return pc
+    else:
+        pc = (rot_mat @ pc.T).T
+        return pc
 
     
     
@@ -567,7 +589,7 @@ def axis_draw(renderer,renderer_front,renderer_down, device):
     return axis_pcd_rendered, axis_pcd_rendered_front, axis_pcd_rendered_down
 
 def pcd_list_2_img(device,
-    part_pcs_gt,
+    part_pcs_gt11,original_vertices,
     output_img_file_name_original,
     output_img_file_name_original_front,
     output_img_file_name_original_down,
@@ -600,10 +622,13 @@ def pcd_list_2_img(device,
     img_data_list_init_gt = []
     img_data_list_init_gt_front = []
     img_data_list_init_gt_down = []
-    for _i, vertices in enumerate(tqdm(part_pcs_gt, desc='gen snapshot images')):
+    for _i, vertices in enumerate(tqdm(original_vertices, desc='gen snapshot images')):
         #print(pcd_file_name)
         #vertices = vertices.cpu()
-        vertices = torch.from_numpy(vertices).to(device).to(torch.float)
+        if isinstance(vertices, np.ndarray):
+            vertices = torch.from_numpy(vertices).to(device).to(torch.float)
+        else:
+            vertices = vertices.to(device).to(torch.float)
         translated_points = vertices
         #N, dim = vertices.shape
 
@@ -668,7 +693,7 @@ def pcd_list_2_img(device,
     imageio.mimsave(output_img_file_name_init_gt_front, [sum_arrays(img_data_list_init_gt_front)], format='PNG')
     imageio.mimsave(output_img_file_name_init_gt_down, [sum_arrays(img_data_list_init_gt_down)], format='PNG')
 
-def gt_img(device, part_pcs_gt, inference_result_dir, output_dir, obj_id_list):
+def gt_img(device, part_pcs_gt, original_vertices, inference_result_dir, output_dir, obj_id_list):
 
     data_id = inference_result_dir.split("/")[-1]
     os.makedirs(f'{output_dir}/{data_id}',exist_ok=True)
@@ -677,7 +702,7 @@ def gt_img(device, part_pcs_gt, inference_result_dir, output_dir, obj_id_list):
     gt = np.load(f'{inference_result_dir}/gt.npy')
     init_pose = np.load(f'{inference_result_dir}/init_pose.npy')
 
-    pcd_list_2_img(device, part_pcs_gt, 
+    pcd_list_2_img(device, part_pcs_gt, original_vertices,
         f'{output_dir}/{data_id}/{"original"}.png',f'{output_dir}/{data_id}/{"original_front"}.png',f'{output_dir}/{data_id}/{"original_down"}.png',
         f'{output_dir}/{data_id}/{"init"}.png', f'{output_dir}/{data_id}/{"init_front"}.png', f'{output_dir}/{data_id}/{"init_down"}.png', 
         f'{output_dir}/{data_id}/{"init_gt"}.png',f'{output_dir}/{data_id}/{"init_gt_front"}.png',f'{output_dir}/{data_id}/{"init_gt_down"}.png',
@@ -692,7 +717,7 @@ def gt_img(device, part_pcs_gt, inference_result_dir, output_dir, obj_id_list):
 def plot_pointcloud2_same_with_part_acc(
     device,
     output_dir,
-    part_pcs_gt,
+    part_pcs_gt11, original_vertices,
     obj_id_list,
     init_pose, gt,
     predict_0,
@@ -727,7 +752,7 @@ def plot_pointcloud2_same_with_part_acc(
   
   
   
-    translated_points = _rotate_whole_part_xyz(part_pcs_gt, init_pose[3:], True)
+    translated_points = _rotate_whole_part_xyz(original_vertices, init_pose[3:], True)
     #translated_points = Transform3d(device=device).compose(init_rotate).transform_points(translated_points)#
     #for i in range(10):
     #    print(i, np.mean(translated_points[i], axis=0))
@@ -743,12 +768,12 @@ def plot_pointcloud2_same_with_part_acc(
         pc = _recenter_pc(pc,gt[i,:3])
         pc = _rotate_pc_xyz(pc,gt[i,3:], False)
         new_pc.append(pc)
-    new_pc = np.array(new_pc)
+    #new_pc = np.array(new_pc)
 
     axis_pcd_rendered, axis_pcd_rendered_front, axis_pcd_rendered_down = axis_draw(renderer, renderer_front,renderer_down, device)
 
 
-    for _step in range(20):
+    for _step in tqdm(range(20)):
             
         pts_pred = []
         mse_r_list = []
@@ -768,35 +793,60 @@ def plot_pointcloud2_same_with_part_acc(
             mse_t_list.append(mse_t)
             pts_pred.append(pc)
 
-        print(_step,np.mean(mse_r_list),np.mean(mse_t_list))
-        pts_pred = np.stack(pts_pred)
+        #print(_step,np.mean(mse_r_list),np.mean(mse_t_list))
+        try:
+            pts_pred = np.stack(pts_pred)
+        except:
+            pass
 
-        pts_pred = _recenter_centroid(-pts_pred,init_pose[:3])
+        pts_pred = _recenter_centroid(pts_pred,init_pose[:3], inverted=True)
         pts_pred = _rotate_whole_part_xyz(pts_pred, init_pose[3:], False)
 
-        pts_pred = torch.from_numpy(pts_pred).to(device).float()
-        
+        #pts_pred = torch.from_numpy(pts_pred).to(device).float()
         images = []
         images_front = []
         images_down = []
         image_index_2_text = {}
         image_index_2_color = {}
         image_index_2_dice_score = {}
-        for _part_idx in tqdm(range(pts_pred.shape[0])):
-            colors = torch.ones_like(pts_pred[_part_idx]) * torch.tensor(tab10_r.colors[_part_idx%20][:3]).to(device)  # blue points
+        for _part_idx in range(len(pts_pred)):
+            if isinstance(pts_pred[_part_idx], np.ndarray):
+                _cur_part_pcd = torch.from_numpy(pts_pred[_part_idx]).to(device).float()
+            else:
+                _cur_part_pcd = pts_pred[_part_idx].to(device).float()
 
-            point_cloud = pytorch3d.structures.Pointclouds(points=[pts_pred[_part_idx]], features=[colors.to(torch.float)])
+            colors = torch.ones_like(_cur_part_pcd).to(device) * torch.tensor(tab10_r.colors[_part_idx%20][:3]).to(device)  # blue points
 
-            image_index_2_text[_part_idx] = torch.min(pts_pred[_part_idx],axis=0)[0][1].item()
+            point_cloud = pytorch3d.structures.Pointclouds(points=[_cur_part_pcd], features=[colors.to(torch.float)])
+
+            image_index_2_text[_part_idx] = torch.min(_cur_part_pcd,axis=0)[0][1].item()
             #print(_s, _i, torch.min(translated_points,axis=0))
 
 
             if _part_idx >= 1:
                 
                 shape_cd_min = slice_util.calculate_dice_score_from_point_clouds((translated_points_pre - torch.mean(translated_points_pre, axis=0)).cpu().numpy(),
-                (pts_pred[_part_idx] - torch.mean(pts_pred[_part_idx], axis=0)).cpu().numpy() )
+                (_cur_part_pcd - torch.mean(_cur_part_pcd, axis=0)).cpu().numpy() )
                 image_index_2_dice_score[_part_idx] = shape_cd_min
-            translated_points_pre = pts_pred[_part_idx]
+            translated_points_pre = _cur_part_pcd
+
+
+            if _step == 19: # the last iteration
+                with open(f'{output_dir}/trans_diff/{_part_idx}.obj', 'w') as outfile:
+                    for _arr in _cur_part_pcd:
+                        outfile.write(f'v {_arr[0]} {_arr[1]} {_arr[2]}\n')
+
+            if _step == predict_0.shape[0]-1: # the last iteration
+
+                #translated_points_init_gt, _ = transform_pc(device, vertices, init_pose, gt, None, _s, _i)
+                #with open(f'{output_dir}/init_gt/{_i}.obj', 'w') as outfile:
+                #    for _arr in translated_points_init_gt.cpu().numpy():
+                #        outfile.write(f'v {_arr[0]} {_arr[1]} {_arr[2]}\n')
+
+                with open(f'{output_dir}/trans/{_part_idx}.obj', 'w') as outfile:
+                    for _arr in _cur_part_pcd:
+                        outfile.write(f'v {_arr[0]} {_arr[1]} {_arr[2]}\n')
+
 
             #translated_points = vertices.to(device)
             image_index_2_color[_part_idx] = tab10_r.colors[_part_idx%20][:3]
@@ -816,6 +866,11 @@ def plot_pointcloud2_same_with_part_acc(
         imageio.mimsave(f'{output_dir}/iteration/{_step}_front.png', [images_front[0]], format='PNG')
         imageio.mimsave(f'{output_dir}/iteration/{_step}_down.png', [images_down[0]], format='PNG')
         
+
+
+
+
+
         sorted_image_index_2_text = sorted(image_index_2_text.items(), key=lambda item: item[1] ,reverse=True)
         
         slice_pos_text = []
@@ -837,6 +892,44 @@ def plot_pointcloud2_same_with_part_acc(
         add_text_to_png(f'{output_dir}/iteration/{_step}_front.png', slice_pos_text, f'{output_dir}/iteration/{_step}_front.png')
         add_text_to_png(f'{output_dir}/iteration/{_step}_down.png', slice_pos_text, f'{output_dir}/iteration/{_step}_down.png')
         
+
+
+
+
+    #plt.show(fig)
+    _last_obj_flies  = glob.glob(f'{output_dir}/trans_diff/{"*"}.obj')
+    slice_util.combine_obj_files(_last_obj_flies,f'{output_dir}/combined_diff.obj')
+    _last_obj_flies  = glob.glob(f'{output_dir}/trans/{"*"}.obj')
+    slice_util.combine_obj_files(_last_obj_flies,f'{output_dir}/combined_diff_rotate.obj')
+
+    w = iio.get_writer(f'{output_dir}/video.mp4', format='FFMPEG', mode='I', fps=2,
+                        #codec='h264_vaapi',
+                        pixelformat='yuv420p')
+    
+    for _step in range(predict_0.shape[0]):
+        w.append_data(iio.imread(f'{output_dir}/iteration/{_step}.png'))
+
+    w.close()
+
+
+    w = iio.get_writer(f'{output_dir}/video_front.mp4', format='FFMPEG', mode='I', fps=2,
+                        #codec='h264_vaapi',
+                        pixelformat='yuv420p')
+    
+    for _step in range(predict_0.shape[0]):
+        w.append_data(iio.imread(f'{output_dir}/iteration/{_step}_front.png'))
+
+    w.close()
+
+    w = iio.get_writer(f'{output_dir}/video_down.mp4', format='FFMPEG', mode='I', fps=2,
+                        #codec='h264_vaapi',
+                        pixelformat='yuv420p')
+    
+    for _step in range(predict_0.shape[0]):
+        w.append_data(iio.imread(f'{output_dir}/iteration/{_step}_down.png'))
+
+    w.close()
+
     return
 
     axis_pcd_rendered, axis_pcd_rendered_front, axis_pcd_rendered_down = axis_draw(renderer, renderer_front,renderer_down, device)
@@ -1218,7 +1311,7 @@ def get_y_rotation_angle_360(q) -> float:
         
     return normalized_angle
 
-def make_video(device, part_pcs_gt, inference_dir, output_dir, obj_id_list, dice_process = False):
+def make_video(device, part_pcs_gt11, original_vertices, inference_dir, output_dir, obj_id_list, dice_process = False):
     
         
     data_id = inference_dir.rsplit("/",1)[1]
@@ -1242,7 +1335,7 @@ def make_video(device, part_pcs_gt, inference_dir, output_dir, obj_id_list, dice
         #print('predict_0',predict_0.shape) # [20, 18, 7]
         metric = ChamferDistance()
         last_step_index = predict_0.shape[0]-1
-        for _i, vertices  in tqdm(enumerate(part_pcs_gt),desc='rotate by dice score'):
+        for _i, vertices  in tqdm(enumerate(original_vertices),desc='rotate by dice score'):
             #ertices torch.Size([10000, 3])
             #init_pose (7,)
             #gt (12, 7)
@@ -1322,7 +1415,7 @@ def make_video(device, part_pcs_gt, inference_dir, output_dir, obj_id_list, dice
 
         #verts_list = get_vertices(mesh_file_dir, device)
         predict_alg = np.zeros((predict_0.shape[1],predict_0.shape[1],predict_0.shape[2]))
-        for _alg_step  in range(part_pcs_gt.shape[0]):
+        for _alg_step  in range(original_vertices.shape[0]):
             predict_alg[_alg_step,:,:] = predict_0[predict_0.shape[0]-1,:,:]
             predict_alg[_alg_step, :_alg_step+1, :] = predict_last[0,:_alg_step+1,:]
 
@@ -1338,7 +1431,7 @@ def make_video(device, part_pcs_gt, inference_dir, output_dir, obj_id_list, dice
     os.makedirs(f'{output_dir}/{data_id}', exist_ok=True)
 
     #plot_pointcloud2(device, f'{output_dir}/{data_id}',part_pcs_gt, obj_id_list, init_pose, gt, predict_rotated, xlim=(-2, 2), ylim=(-2, 2), zlim=(-2, 2))
-    plot_pointcloud2_same_with_part_acc(device, f'{output_dir}/{data_id}',part_pcs_gt, obj_id_list, init_pose, gt, predict_rotated, xlim=(-2, 2), ylim=(-2, 2), zlim=(-2, 2))
+    plot_pointcloud2_same_with_part_acc(device, f'{output_dir}/{data_id}',part_pcs_gt11,original_vertices, obj_id_list, init_pose, gt, predict_rotated, xlim=(-2, 2), ylim=(-2, 2), zlim=(-2, 2))
 
 
 

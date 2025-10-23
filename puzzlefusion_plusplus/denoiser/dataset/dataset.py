@@ -174,19 +174,19 @@ class GeometryLatentDataset(Dataset):
         #quat_gt = y_axis_rotation_quaternion_from_rad(random_radian) 
         #quat_gt = torch.squeeze(quat_gt, dim=0)
         #print('_rotate_pc_rad',quat_gt.shape, random_radian)
-        quat_gt = torch.randn(4)
+        quat_gt = torch.rand(4)
         quat_gt[1] = 0
         quat_gt[3] = 0
         quat_gt = quat_gt / quat_gt.norm(dim=-1, keepdim=True)
         #print('_rotate_pc',quat_gt.shape)
         
-        _mean = torch.mean(pc, axis=0)
-        tr = Translate(-_mean[0],-_mean[1],-_mean[2], dtype=torch.float32)
-        tr_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32)
+        #_mean = torch.mean(pc, axis=0)
+        #tr = Translate(-_mean[0],-_mean[1],-_mean[2], dtype=torch.float32)
+        #tr_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32)
         rr = Rotate(quaternion_to_matrix(quat_gt), dtype=torch.float32)
-        pc = Transform3d().compose(tr).transform_points(pc)
+        #pc = Transform3d().compose(tr).transform_points(pc)
         pc = Transform3d().compose(rr).transform_points(pc)
-        pc = Transform3d().compose(tr_r).transform_points(pc)
+        #pc = Transform3d().compose(tr_r).transform_points(pc)
         
         
         return pc.cpu().numpy(), quat_gt.cpu().numpy()
@@ -199,7 +199,7 @@ class GeometryLatentDataset(Dataset):
         P, N, _ = pc.shape
         pc = pc.reshape(-1, 3)
         rot_mat = R.random().as_matrix()
-        print('rot_mat',rot_mat)
+        #print('rot_mat',rot_mat)
         pc = (rot_mat @ pc.T).T
         quat_gt = R.from_matrix(rot_mat.T).as_quat()
         # we use scalar-first quaternion
@@ -217,9 +217,9 @@ class GeometryLatentDataset(Dataset):
 
         pc = torch.from_numpy(pc).float()
 
-        _mean = torch.mean(pc, axis=0)
-        tr = Translate(-_mean[0],-_mean[1],-_mean[2], dtype=torch.float32)
-        tr_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32)
+        #_mean = torch.mean(pc, axis=0)
+        #tr = Translate(-_mean[0],-_mean[1],-_mean[2], dtype=torch.float32)
+        #tr_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32)
 
         
         #quat_gt = torch.tensor([torch.rand(1),0,1,0])
@@ -228,7 +228,7 @@ class GeometryLatentDataset(Dataset):
         #quat_gt = y_axis_rotation_quaternion_from_rad(random_radian) 
         #quat_gt = torch.squeeze(quat_gt, dim=0)
 
-        quat_gt = torch.randn(4)
+        quat_gt = torch.rand(4)
         quat_gt[1] = 0
         quat_gt[3] = 0
         quat_gt = quat_gt / quat_gt.norm(dim=-1, keepdim=True)
@@ -240,13 +240,13 @@ class GeometryLatentDataset(Dataset):
         #pc = t.transform_points(pc)#.to(torch.float).to(device)
 
         
-        _mean = torch.mean(pc, axis=0)
-        tr = Translate(-_mean[0],-_mean[1],-_mean[2], dtype=torch.float32)
-        tr_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32)
+        #_mean = torch.mean(pc, axis=0)
+        #tr = Translate(-_mean[0],-_mean[1],-_mean[2], dtype=torch.float32)
+        #tr_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32)
         rr = Rotate(quaternion_to_matrix(quat_gt), dtype=torch.float32)
-        pc = Transform3d().compose(tr).transform_points(pc)
+        #pc = Transform3d().compose(tr).transform_points(pc)
         pc = Transform3d().compose(rr).transform_points(pc)
-        pc = Transform3d().compose(tr_r).transform_points(pc)
+        #pc = Transform3d().compose(tr_r).transform_points(pc)
 
         return pc.cpu().numpy().reshape(P, N, 3), quat_gt.cpu().numpy()
 

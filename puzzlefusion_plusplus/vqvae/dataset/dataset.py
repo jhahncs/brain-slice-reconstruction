@@ -45,7 +45,7 @@ class GeometryPartDataset(Dataset):
         self.max_num_part = max_num_part  # ignore shapes with more parts
         self.shuffle_parts = shuffle_parts  # shuffle part orders
         self.rot_range = rot_range  # rotation range in degree
-        
+        self.file_ext=cfg.data.file_ext
         # list of fracture folder path
         self.data_list = self._read_data(data_fn)
         if overfit > 0:
@@ -85,8 +85,8 @@ class GeometryPartDataset(Dataset):
                 frac = os.path.join(mesh, frac)
                 _files = os.listdir(os.path.join(self.data_dir, frac))
                 #_files = [f for f in _files if f.endswith(".obj") and f.startswith('piece_flat_')]
-                _files = [f for f in _files if f.endswith(".glb")]
-                _files.sort(key = lambda k: int(k.replace('.glb',"")))
+                _files = [f for f in _files if f.endswith(f".{self.file_ext}")]
+                _files.sort(key = lambda k: int(k.replace(f'.{self.file_ext}',"")))
 
                 num_parts = len(_files)
                 if num_parts > self.max_num_part:
@@ -166,9 +166,9 @@ class GeometryPartDataset(Dataset):
         data_folder = os.path.join(self.data_dir, data_folder)
         mesh_files = os.listdir(data_folder)
         #mesh_files = [f for f in mesh_files if f.endswith('.obj') and f.startswith('piece_flat_')]
-        mesh_files = [f for f in mesh_files if f.endswith('.glb') ]
+        mesh_files = [f for f in mesh_files if f.endswith(f'.{self.file_ext}') ]
         #mesh_files.sort()
-        mesh_files.sort(key = lambda k: int(k.replace('.glb',"")))
+        mesh_files.sort(key = lambda k: int(k.replace(f'.{self.file_ext}',"")))
         #print(data_folder,mesh_files)
         if len(mesh_files) > self.max_num_part:
             mesh_files = mesh_files[:20]
@@ -183,25 +183,35 @@ class GeometryPartDataset(Dataset):
             random.shuffle(mesh_files)
 
         # read mesh and sample points
-        '''
-        meshes = [
-            trimesh.load(os.path.join(data_folder, mesh_file))
-            for mesh_file in mesh_files
-        ]
-        '''
+
         
-        meshes = []
-        for mesh_file in mesh_files:
-            _glb = trimesh.load(os.path.join(data_folder, mesh_file))
-            all_vertices = [geom.vertices for geom in _glb.geometry.values()]
-            combined_vertices = np.vstack(all_vertices)
-            _glb_w = trimesh.PointCloud(vertices=combined_vertices)
-            meshes.append(_glb_w)
+        
 
-
-        #for mesh_file in mesh_files:
-        #    m = trimesh.load(os.path.join(data_folder, mesh_file))
-        #   print('type',type(m),mesh_file)
+        if self.file_ext == 'glb':
+            meshes = []
+            for mesh_file in mesh_files:
+                _glb = trimesh.load(os.path.join(data_folder, mesh_file))
+                all_vertices = [geom.vertices for geom in _glb.geometry.values()]
+                combined_vertices = np.vstack(all_vertices)
+                _glb_w = trimesh.PointCloud(vertices=combined_vertices)
+                meshes.append(_glb_w)
+        else:       
+            '''
+            meshes = []
+            for mesh_file in mesh_files:
+                print(os.path.join(data_folder, mesh_file))
+                scene = trimesh.load(os.path.join(data_folder, mesh_file))
+                print(scene)
+                mesh_name = list(scene.geometry.keys())[0]
+                mesh = scene.geometry[mesh_name]
+                meshes.append(mesh)
+            ''' 
+            meshes = [
+                trimesh.load(os.path.join(data_folder, mesh_file))
+                
+                for mesh_file in mesh_files
+            ]
+            
         
         # Check if the meshes are connected
         graph = self._check_connectivity(meshes)
@@ -215,6 +225,8 @@ class GeometryPartDataset(Dataset):
                     trimesh.sample.sample_surface(mesh, self.num_points)[0]
                     for mesh in meshes
                 ]
+
+
             
 
 

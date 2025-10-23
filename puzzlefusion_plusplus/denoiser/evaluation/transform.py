@@ -140,14 +140,14 @@ def rotate_y_axis(rot, pc):
                 
 
 
-                _mean = torch.mean(pcd, axis=0)
-                tr = Translate(-_mean[...,0],-_mean[...,1],-_mean[...,2], dtype=torch.float32).to(pcd.device)
-                tr_r = Translate(_mean[...,0],_mean[...,1],_mean[...,2], dtype=torch.float32).to(pcd.device)
+                #_mean = torch.mean(pcd, axis=0)
+                #tr = Translate(-_mean[...,0],-_mean[...,1],-_mean[...,2], dtype=torch.float32).to(pcd.device)
+                #tr_r = Translate(_mean[...,0],_mean[...,1],_mean[...,2], dtype=torch.float32).to(pcd.device)
                 rr = Rotate(quaternion_to_matrix(rot[index_in_a_batch][index_in_a_object]), dtype=torch.float32).to(pcd.device)
                 #print('@@@@@@@@@@@@@@@@@',tr.device, pcd.device)
-                new_pcd = Transform3d(device=pcd.device).compose(tr).transform_points(pcd)
-                new_pcd = Transform3d(device=pcd.device).compose(rr).transform_points(new_pcd)
-                new_pcd = Transform3d(device=pcd.device).compose(tr_r).transform_points(new_pcd)
+                #new_pcd = Transform3d(device=pc.device).compose(tr).transform_points(pcd)
+                new_pcd = Transform3d(device=pcd.device).compose(rr).transform_points(pcd)
+                #new_pcd = Transform3d(device=pc.device).compose(tr_r).transform_points(new_pcd)
 
                 
                 
@@ -169,13 +169,13 @@ def rotate_y_axis(rot, pc):
         #t = Transform3d().compose(rr)
         #pc = t.transform_points(pc)#.to(torch.float).to(device)
     
-        _mean = torch.mean(pc, axis=0)
-        tr = Translate(-_mean[...,0],-_mean[...,1],-_mean[...,2], dtype=torch.float32).to(pcd.device)
-        tr_r = Translate(_mean[...,0],_mean[...,1],_mean[...,2], dtype=torch.float32).to(pcd.device)
-        rr = Rotate(quaternion_to_matrix(rot), dtype=torch.float32).to(pcd.device)
-        pc = Transform3d(device=pcd.device).compose(tr).transform_points(pc)
-        pc = Transform3d(device=pcd.device).compose(rr).transform_points(pc)
-        pc = Transform3d(device=pcd.device).compose(tr_r).transform_points(pc)
+        #_mean = torch.mean(pc, axis=0)
+        #tr = Translate(-_mean[...,0],-_mean[...,1],-_mean[...,2], dtype=torch.float32).to(pc.device)
+        #tr_r = Translate(_mean[...,0],_mean[...,1],_mean[...,2], dtype=torch.float32).to(pc.device)
+        rr = Rotate(quaternion_to_matrix(rot), dtype=torch.float32).to(pc.device)
+        #pc = Transform3d(device=pc.device).compose(tr).transform_points(pc)
+        pc = Transform3d(device=pc.device).compose(rr).transform_points(pc)
+        #pc = Transform3d(device=pc.device).compose(tr_r).transform_points(pc)
 
 
     return pc

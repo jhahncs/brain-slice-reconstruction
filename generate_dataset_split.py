@@ -29,10 +29,10 @@ if __name__ == "__main__":
     datalist_file_dir = args.datalist_file_dir
     dir = args.obj_dir  
     '''
-    date_type = 'atlas_mouse_brain_50mm'
+    date_type = 'atlas_mouse_brain_50mm_mesh'
     date_type = 'brain_lightsheet'
     
-    dataname = 'WHOLE_light_10slices'
+    dataname = 'LS_10s_1000n'
     dir = f'/data/jhahn/data/shape_dataset/data/{date_type}'
     datalist_file_dir = '/data/jhahn/data/shape_dataset/data'
 
@@ -83,11 +83,11 @@ if __name__ == "__main__":
     
     #data_name = f'{tickness}_{is_no_gap_between_slices}_{is_curvature}_{num_of_missing_slices}'
     #print(data_name)
-    _dir_list_filtered = _dir_list 
+    #_dir_list_filtered = _dir_list 
     # 그룹 비율을 설정합니다 (총합이 1이 되어야 합니다).
     print(len(_dir_list_filtered))
     random.shuffle(_dir_list_filtered)
-    _dir_list_filtered = _dir_list_filtered[:1500]
+    _dir_list_filtered = _dir_list_filtered[:1000]
     group_ratios = [0.8, 0.1, 0.1] 
 
     # 폴더 목록을 무작위로 섞습니다.
