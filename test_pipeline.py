@@ -60,9 +60,9 @@ def load_cfg(config_dir):
 
 
 
-def init_dir(files_root,data_ids):
+def init_dir(files_root,data_ids,iteration=0):
         
-    test_root = f'{files_root}/{data_ids[0]}'
+    test_root = f'{files_root}/{data_ids[0]}/{iteration}'
 
     tiff_dir_root = f'{test_root}/tiff'
     obj_dir_root = f'{test_root}/objs'
@@ -89,7 +89,7 @@ def _gen_pc_data(cfg, loader, data_type):
         part_valids = data_dict['part_valids'][0]
         num_parts = data_dict['num_parts'][0].item()
         mesh_file_path = data_dict['mesh_file_path'][0]
-        print(mesh_file_path)
+        #print(mesh_file_path)
         graph = data_dict['graph'][0]
         category = data_dict['category'][0]
         part_pcs_gt = data_dict['part_pcs_gt'][0]
@@ -119,6 +119,7 @@ def get_obj_from_testdataset(data_type,data_id,tiff_dir,tiff_dir_root,obj_dir_ro
     obj_files = []
     glb_dir = f'/data/jhahn/data/shape_dataset/data/{data_type}/{data_id}/fractured_0'
     os.makedirs(f'{obj_dir_root}/test/fractured', exist_ok=True)
+    print(glb_dir)
     for f in os.listdir(glb_dir):
         _id = int(f.split(".")[-2])
         #shutil.copyfile(f'{tiff_dir}/{_id}.tif', f'{tiff_dir_root}/{_id}.tif')    
@@ -126,7 +127,7 @@ def get_obj_from_testdataset(data_type,data_id,tiff_dir,tiff_dir_root,obj_dir_ro
         _glb = trimesh.load(f'{obj_dir_root}/test/fractured/{f}')
         _new_obj_filename = render_output_dir+"/objs/"+f.replace(".glb",".obj")
         _glb.export(_new_obj_filename)
-        print(_new_obj_filename)
+        
         obj_files.append(_new_obj_filename)
     print(f"combining {len(obj_files)} files")
     slice_util.combine_obj_files(obj_files, render_output_dir+f"/gt_{data_id}.obj")
@@ -226,11 +227,19 @@ def inference(cfg, pc_dir_root, ckpt_path, inference_dir_root):
 
     # initialize trainer
     trainer = pl.Trainer(accelerator=cfg.accelerator, devices=1, max_epochs=1, logger=False)
-    print(trainer)
+    #print(trainer)
     # start inference
     r = trainer.test(model=model, dataloaders=test_loader)
     
+
+    save_dir = os.path.join(
+            cfg.experiment_output_path,
+            "inference", 
+            cfg.inference_dir)
+
+    
     print("test done",r)
+    return save_dir
 
 def zip_and_download_folder(folder_path):
     """
@@ -261,7 +270,7 @@ def zip_and_download_folder(folder_path):
     print("위 링크를 클릭하여 다운로드하세요.")
     return zip_file_name
 
-def render(inference_dir_root, obj_id_list ,part_pcs_gt, original_vertices,render_output_dir):
+def render(inference_dir_root, obj_id_list ,part_pcs_gt, original_vertices, part_valids, render_output_dir):
         
     result_dir_list = []
     for f in os.listdir(inference_dir_root):
@@ -273,9 +282,9 @@ def render(inference_dir_root, obj_id_list ,part_pcs_gt, original_vertices,rende
     _result_dir = result_dir_list[0]
 
     
-    render_inference_result.gt_img(device, part_pcs_gt,original_vertices, _result_dir, render_output_dir, obj_id_list)
+    render_inference_result.gt_img(device, part_pcs_gt,original_vertices,part_valids, _result_dir, render_output_dir, obj_id_list)
 
-    render_inference_result.make_video(device, part_pcs_gt,original_vertices, _result_dir,render_output_dir , obj_id_list)
+    render_inference_result.make_video(device, part_pcs_gt,original_vertices, part_valids, _result_dir,render_output_dir , obj_id_list)
 
 from chamferdist import ChamferDistance
 

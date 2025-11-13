@@ -12,18 +12,27 @@ nohup python batch_slicer.py /data/jhahn/data/brain_lightsheet/stack.tif /data/j
 #nohup python myslicer.py /data/jhahn/data/brain_lightsheet/stack.tif /home/jhahn/puzzlefusion-plusplus/2d_2_pcd/slicer_my_brain &
 
 nohup python obj_2_pcd.py --obj_dir_root /data/jhahn/data/shape_dataset/data/brain_lightsheet --tiff_dir_root /data/jhahn/data/brain_lightsheet/slices  > nohup.out 2>&1 &
-python generate_dataset_split.py --dataname 0.003_HIP_CUR --obj_dir /data/jhahn/data/shape_dataset/data/brain_lightsheet --datalist_file_dir /data/jhahn/data/shape_dataset/data
+python generate_dataset_split.py --dataname 0.005_LS --obj_dir /data/jhahn/data/shape_dataset/data/brain_lightsheet --datalist_file_dir /data/jhahn/data/shape_dataset/data
 
-nohup python generate_pc_data.py +data.save_pc_data_path=/data/jhahn/data/shape_dataset/pc_data/brain_lightsheet &
-python generate_pc_data.py +data.save_pc_data_path=/data/jhahn/data/shape_dataset/pc_data/${DATASET_NAME}
+DATASET_NAME=ABA_10s_1000n_mesh
+DATASET_NAME=LS_10s_1000n
+#DATASET_TYPE=atlas_mouse_brain_50mm_mesh
+DATASET_TYPE=brain_lightsheet
+EXP_NAME=rot_y_un_e300
 
+
+python generate_pc_data.py +data.save_pc_data_path=/data/jhahn/data/shape_dataset/pc_data/${DATASET_NAME} data.data_fn="$DATASET_NAME.\{\}.txt" \
+    data.data_dir=/data/jhahn/data/shape_dataset/pc_data/${DATASET_NAME}/train/ \
+    data.data_val_dir=/data/jhahn/data/shape_dataset/pc_data/${DATASET_NAME}/val/ \
+    data.mesh_data_dir=/data/jhahn/data/shape_dataset/data \
+    +data.file_ext=obj
 
 
 nohup  python train_denoiser.py \
     experiment_name=${DATASET_NAME}_${EXP_NAME}_denoiser_trans \
     data.batch_size=12 \
     data.val_batch_size=12 \
-    trainer.max_epochs=100 \
+    trainer.max_epochs=300 \
     experiment_output_path=models/${DATASET_NAME}_${EXP_NAME}/denoiser_1 \
     model.encoder_weights_path=models/${DATASET_NAME}_${EXP_NAME}/autoencoder/training/last.ckpt \
     +trainer.devices=2 \

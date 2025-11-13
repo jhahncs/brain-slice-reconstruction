@@ -68,8 +68,8 @@ def tiff_2_xyz(tiff_filename_full, y):
 
     image_top = cv2.imread(tiff_filename_full, cv2.IMREAD_COLOR)
     
-    new_width, new_height = 150, 150
-    image_top = cv2.resize(image_top, (new_width, new_height))
+    #new_width, new_height = 150, 150
+    #image_top = cv2.resize(image_top, (new_width, new_height))
 
     gray_image_top = cv2.cvtColor(image_top, cv2.COLOR_BGR2GRAY)
     canny_image_top = cv2.Canny(gray_image_top,100,200)
@@ -79,7 +79,7 @@ def tiff_2_xyz(tiff_filename_full, y):
         if x > 0 :
             points_top.append([(canny_image_top.shape[1]-i[1])/(canny_image_top.shape[1]), y, (canny_image_top.shape[0]-i[0])/(canny_image_top.shape[0])])
     points_top = np.array(points_top)
-    #print(points_top.shape)
+    #print('points_top',points_top.shape)
     if points_top.shape[0] > 100:
         points_top_sampled_idx = np.random.choice(points_top.shape[0], size=100, replace=False)
         points_top = points_top[points_top_sampled_idx]
@@ -88,21 +88,21 @@ def tiff_2_xyz(tiff_filename_full, y):
 
 
 def tiff_2_pcd_curvature(num_of_missing_slices, image_relative_index, tiff_filename_list, 
-                         output_dir, tickness, no_gap_between_slices = True):
+                         output_dir, tickness, no_gap_between_slices = True, DEBUG=True):
 
 
     
     slice_filename_arr = tiff_filename_list[0].split("/")
     slice_filename_itself = slice_filename_arr[len(slice_filename_arr)-1].split(".")[0]
-    #obj_filename = f'{slice_filename_itself}.obj'
-    obj_filename = f'{slice_filename_itself}.glb'
+    obj_filename = f'{slice_filename_itself}.obj'
+    #obj_filename = f'{slice_filename_itself}.glb'
     pcd_filename = f'{output_dir}/{obj_filename}'
     #if not overwrite and os.path.exists(pcd_filename):
     #    return pcd_filename
 
     os.makedirs(output_dir, exist_ok = True)
 
-    
+    if DEBUG: print(obj_filename)
 
 
     if no_gap_between_slices:
@@ -111,18 +111,21 @@ def tiff_2_pcd_curvature(num_of_missing_slices, image_relative_index, tiff_filen
     else:
         y_min = image_relative_index * tickness
         y_max = y_min + tickness
-    #print(image_relative_index, y_min , y_max)
+    if DEBUG: print(image_relative_index, y_min , y_max)
+
     num_interpolated = int(tickness*1000)
-    num_interpolated = 3
+    #num_interpolated = 3
     _pre_points = None
     _cur_y = y_min
     xyz_list = []
     #print(tiff_filename_list)
     for _i, tiff_filename in enumerate(tiff_filename_list):
         #start_time = time.time()
-
+        
+        #print(tiff_filename)
         points_this, (h, w, c ) = tiff_2_xyz(tiff_filename, _cur_y)
-        #print('points_this',points_this.shape)
+        print(points_this.shape)
+        #if DEBUG: print('points',f'{np.min(points_this, axis=0)},{np.max(points_this, axis=0)}')
         #end_time = time.time()
         #elapsed_time = end_time - start_time
 
@@ -136,7 +139,7 @@ def tiff_2_pcd_curvature(num_of_missing_slices, image_relative_index, tiff_filen
             #print(f'{_i}, {_cur_y:.3f} / {np.min(_pre_points, axis=0)[1]:.3f}, {np.max(_pre_points, axis=0)[1]:.3f} / {np.min(points_this, axis=0)[1]:.3f}, {np.max(points_this, axis=0)[1]:.3f}')
             #start_time = time.time()
             _xyz_list = interpolate_points_between_borders(_pre_points, points_this, num_interpolated)
-            #print(f'{np.min(_xyz_list, axis=0)[1]:.3f},{np.max(_xyz_list, axis=0)[1]:.3f}')
+            #if DEBUG: print("inter",f'{np.min(_xyz_list, axis=0)},{np.max(_xyz_list, axis=0)}')
             xyz_list.extend(_xyz_list)
             #end_time = time.time()
             #elapsed_time = end_time - start_time
@@ -163,14 +166,16 @@ def tiff_2_pcd_curvature(num_of_missing_slices, image_relative_index, tiff_filen
         xyz_list_sampled_idx = np.random.choice(xyz_list.shape[0], size=5000, replace=False)
         xyz_list = xyz_list[xyz_list_sampled_idx]
     #print(f'{tickness},{np.min(xyz_list, axis=0)[1]:.3f},{np.max(xyz_list, axis=0)[1]:.3f}')
-    point_cloud = trimesh.PointCloud(vertices=xyz_list)
-    point_cloud.export(file_obj=pcd_filename)
+    #if DEBUG: print("inter",f'{np.min(_xyz_list, axis=0)},{np.max(_xyz_list, axis=0)}')
+    
+    #point_cloud = trimesh.PointCloud(vertices=xyz_list)
+    #point_cloud.export(file_obj=pcd_filename)
 
-    '''
+    
     with open(pcd_filename,'w') as f:
         for xyz in xyz_list:
             f.write(f'v {xyz[0]} {xyz[1]} {xyz[2]}\n')
-    '''
+    
     return pcd_filename
 
 def tiff_2_pcd(num_of_missing_slices, offset_y, tiff_filename_full,tiff_filename_full2=None, output_dir=None, 
@@ -529,7 +534,7 @@ if __name__ == "__main__":
     print(data_ids)
 
     to_index=700
-    tickness_list_const = [0.001, 0.0015, 0.002,0.0025,0.003,0.0035]
+    tickness_list_const = [0.005]
     no_gap_between_slices_list = [True]
     is_curvature_list = [True]
     num_of_missing_slices_list = sorted(list(range(0, 6, 1))) #[0, 1, 2, 3, 4, 5] # 10, 15, 20, 15, 30, 35, 40, 45, 50]
@@ -598,7 +603,7 @@ if __name__ == "__main__":
                             image_filename_list_sub = image_filename_list[from_index  : to_index ]
                             _num_of_slices = int((len(image_filename_list_sub)+1)/(num_of_missing_slices )) 
                             #print(from_index, to_index, int(( len(image_filename_list_sub)+1)/(num_of_missing_slices )))
-                            if  _num_of_slices == 10:
+                            if  _num_of_slices <= 19:
 
                                 #print(from_index, num_of_missing_slices, len(image_filename_list_sub))
                                 tasks_to_run.append(( image_filename_list_sub, slice_angle, tickness, num_of_missing_slices,  

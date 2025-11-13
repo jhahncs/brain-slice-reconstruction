@@ -53,7 +53,7 @@ if __name__ == "__main__":
     _dir_list = os.listdir(dir)
     _dir_list_filtered = []
 
-    tickness = '0.004'
+    tickness = '0.005'
     is_no_gap_between_slices = 'True'
     is_curvature = 'True'
     num_of_missing_slices = "5"
@@ -74,7 +74,7 @@ if __name__ == "__main__":
             slice_dirname = f'sliced_on_1.0_1.0_0.0'
         else:
             slice_dirname = f'sliced_on_{int(exp_info.cut_x)}_{int(exp_info.cut_y)}_{int(exp_info.cut_z)}'
-        if  exp_info.num_of_slices == 10:
+        if  exp_info.num_of_slices > 3:
             _dir_list_filtered.append(_dir)
             #print(slice_dirname, exp_info.num_of_slices)
         
@@ -87,7 +87,7 @@ if __name__ == "__main__":
     # 그룹 비율을 설정합니다 (총합이 1이 되어야 합니다).
     print(len(_dir_list_filtered))
     random.shuffle(_dir_list_filtered)
-    _dir_list_filtered = _dir_list_filtered[:1000]
+    _dir_list_filtered = _dir_list_filtered[:2000]
     group_ratios = [0.8, 0.1, 0.1] 
 
     # 폴더 목록을 무작위로 섞습니다.

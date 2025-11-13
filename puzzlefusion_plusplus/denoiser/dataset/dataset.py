@@ -60,19 +60,36 @@ class GeometryLatentDataset(Dataset):
             part_pcs_gt = data_dict['part_pcs_gt']
             mesh_file_path = data_dict['mesh_file_path'].item()
             graph = data_dict['graph']
-            # import pdb
-            # pdb.set_trace()
             ref_part = data_dict['ref_part']
 
-            sample = {
-                'data_id': data_id,
-                'part_valids': part_valids,
-                'mesh_file_path': mesh_file_path,
-                'num_parts': num_parts,
-                'ref_part': ref_part,
-                'part_pcs_gt': part_pcs_gt,
-                'graph': graph,
-            }
+            #jhahn
+            if 'gt' in data_dict:
+
+                sample = {
+                    'data_id': data_id,
+                    'part_valids': part_valids,
+                    'mesh_file_path': mesh_file_path,
+                    'num_parts': num_parts,
+                    'ref_part': ref_part,
+                    'part_pcs_gt': part_pcs_gt,
+                    'graph': graph,
+                    'gt': data_dict['gt'],
+                    'part_pcs': data_dict['part_pcs'],
+                    'init_pose': data_dict['init_pose'],
+                    'part_scale': data_dict['part_scale'],
+                    
+                }
+            else:
+                sample = {
+                    'data_id': data_id,
+                    'part_valids': part_valids,
+                    'mesh_file_path': mesh_file_path,
+                    'num_parts': num_parts,
+                    'ref_part': ref_part,
+                    'part_pcs_gt': part_pcs_gt,
+                    'graph': graph,
+                    
+                }
 
             if self.mode == "test" and denoiser_only_flag is False:
                 matching_data_path = os.path.join(self.matching_data_path, str(data_id) + '.npz')
@@ -278,6 +295,7 @@ class GeometryLatentDataset(Dataset):
         #print("part_pcs_gt=============================")
         #for i in range(num_parts):
         #    print(i,part_pcs_gt[i][:3,:])
+        
 
         ref_part = data_dict['ref_part']
         #for i in range(num_parts):
@@ -343,14 +361,27 @@ class GeometryLatentDataset(Dataset):
         scale[scale == 0] = 1
         cur_pts = cur_pts / scale
         
-        data_dict['part_pcs'] = cur_pts
         data_dict['part_pcs_gt'] = part_pcs_gt
-        data_dict['part_rots'] = cur_quat
-        data_dict['part_trans'] = cur_trans
-        data_dict['part_scale'] = scale.squeeze(-1)
+        
 
-        data_dict['init_pose_r'] = pose_gt_r
-        data_dict['init_pose_t'] = pose_gt_t
+
+        if 'gt' in data_dict:
+            print('gt, init_pose available')
+            #data_dict['part_scale'] = scale.squeeze(-1)
+            #data_dict['part_pcs'] = data_dict['gt']
+            data_dict['part_rots'] = data_dict['gt'][...,3:]
+            data_dict['part_trans'] = data_dict['gt'][...,:3]
+            data_dict['init_pose_r'] = data_dict['init_pose'][...,3:]
+            data_dict['init_pose_t'] = data_dict['init_pose'][...,:3]
+        else:
+            data_dict['part_scale'] = scale.squeeze(-1)
+            data_dict['part_pcs'] = cur_pts
+            data_dict['part_rots'] = cur_quat
+            data_dict['part_trans'] = cur_trans            
+            data_dict['init_pose_r'] = pose_gt_r
+            data_dict['init_pose_t'] = pose_gt_t
+
+
 
         
         # Only one reference part

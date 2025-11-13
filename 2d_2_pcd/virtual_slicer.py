@@ -63,8 +63,8 @@ def slice_matrix(V, normal, tolerance=0.5, debug=False, slice_gap=1):
     if debug: print('array_center',array_center)
     #print(int(original_shape[0]/2))
     #print(V[int(original_shape[0]/2)].shape, V[int(original_shape[0]/2)])
-    print(len(np.min(V[int(original_shape[0]/2)],axis=1)),len(np.max(V[int(original_shape[0]/2)],axis=1)))
-    print(np.min(np.min(V[int(original_shape[0]/2)],axis=0),axis=0),np.max(np.max(V[int(original_shape[0]/2)],axis=0),axis=0))
+    #print(len(np.min(V[int(original_shape[0]/2)],axis=1)),len(np.max(V[int(original_shape[0]/2)],axis=1)))
+    #print(np.min(np.min(V[int(original_shape[0]/2)],axis=0),axis=0),np.max(np.max(V[int(original_shape[0]/2)],axis=0),axis=0))
     
     V[int(original_shape[0]/2)].flatten()
     
@@ -94,7 +94,7 @@ def slice_matrix(V, normal, tolerance=0.5, debug=False, slice_gap=1):
     sliced_matrix_list = []
     
     # Iterate through slices along the normal vector
-    max_travel = int(np.ceil(np.linalg.norm(array_center))) * 2
+    max_travel = int(np.ceil(np.linalg.norm(array_center))) * 2 
 
     if debug: print('max_travel',max_travel)
     num_print = 0
@@ -141,7 +141,7 @@ def slice_matrix(V, normal, tolerance=0.5, debug=False, slice_gap=1):
 
     # Stack the collected slices into a new 3D matrix
     sliced_matrix = np.stack(sliced_matrix_list, axis=-1)
-    print('sliced_matrix',sliced_matrix.shape)
+    #print('sliced_matrix',sliced_matrix.shape)
     return remove_zero_slices(sliced_matrix)
 
 

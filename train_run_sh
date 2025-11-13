@@ -9,11 +9,11 @@ EXP_NAME=rot_y_un_e300
 #python generate_dataset_split.py --dataname ${DATASET_NAME} --obj_dir /data/jhahn/data/shape_dataset/data/${DATASET_TYPE} --datalist_file_dir /data/jhahn/data/shape_dataset/data
 
 
-#python generate_pc_data.py +data.save_pc_data_path=/data/jhahn/data/shape_dataset/pc_data/${DATASET_NAME} data.data_fn="$DATASET_NAME.\{\}.txt" \
-#    data.data_dir=/data/jhahn/data/shape_dataset/pc_data/${DATASET_NAME}/train/ \
-#    data.data_val_dir=/data/jhahn/data/shape_dataset/pc_data/${DATASET_NAME}/val/ \
-#    data.mesh_data_dir=/data/jhahn/data/shape_dataset/data \
-#    +data.file_ext=glb
+python generate_pc_data.py +data.save_pc_data_path=/data/jhahn/data/shape_dataset/pc_data/${DATASET_NAME} data.data_fn="$DATASET_NAME.\{\}.txt" \
+    data.data_dir=/data/jhahn/data/shape_dataset/pc_data/${DATASET_NAME}/train/ \
+    data.data_val_dir=/data/jhahn/data/shape_dataset/pc_data/${DATASET_NAME}/val/ \
+    data.mesh_data_dir=/data/jhahn/data/shape_dataset/data \
+    +data.file_ext=obj
 
 #ddp_find_unused_parameters_true
 
@@ -22,7 +22,7 @@ python train_vqvae.py \
     data.batch_size=12 \
     experiment_output_path=models/${DATASET_NAME}_${EXP_NAME}/autoencoder \
     data.val_batch_size=12 \
-    trainer.max_epochs=300\
+    trainer.max_epochs=1000\
     +trainer.devices=2 \
     +trainer.strategy=ddp \
     data.data_fn="$DATASET_NAME.\{\}.txt" \
@@ -35,7 +35,7 @@ python train_vqvae.py \
     experiment_name=${DATASET_NAME}_${EXP_NAME}_denoiser \
     data.batch_size=12 \
     data.val_batch_size=12 \
-    trainer.max_epochs=300 \
+    trainer.max_epochs=1000 \
     experiment_output_path=models/${DATASET_NAME}_${EXP_NAME}/denoiser \
     model.encoder_weights_path=models/${DATASET_NAME}_${EXP_NAME}/autoencoder/training/last.ckpt \
     +trainer.devices=2 \

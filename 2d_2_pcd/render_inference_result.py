@@ -127,7 +127,7 @@ def get_vertices(inference_result_dir, objs_dir, device = None, max_points = 100
     obj_id_list = [o.split("/")[-1].split(".")[0] for o in obj_file_list]
     return vertice_list, obj_id_list
 
-def sum_arrays(total):
+def sum_arrays(total, zero_value ):
 
     summed_array = copy.deepcopy(total[0])
     if len(total) ==  1:
@@ -136,9 +136,9 @@ def sum_arrays(total):
     for arr in total[1:]:
         #print((summed_array > 0 ).sum())
         zero_mask = np.ones(total[0].shape, dtype=bool)
-        zero_mask &= (summed_array == 0)
+        zero_mask &= (summed_array == zero_value)
         #print((zero_mask == 1 ).sum())
-        
+
         summed_array = np.where(zero_mask, arr, summed_array)
 
     return summed_array
@@ -197,7 +197,7 @@ def _recenter_centroid(pc, centroid, inverted=False):
         new_pc = []
         for _part_idx, _part in enumerate(pc):
             if inverted:
-                new_pc.append(-_part - centroid)
+                new_pc.append(_part + centroid)
             else:
                 new_pc.append(_part - centroid)
         return new_pc
@@ -246,34 +246,19 @@ def transform_pc(device, vertices, init_pose, gt, trans_rotate, step, part_index
     else:
         translated_points = vertices
 
-    
+
+
+    init_trans_reverse = Translate(torch.FloatTensor([-init_pose[:3]]), dtype=torch.float32, device=device)
+    init_trans = Translate(torch.FloatTensor([init_pose[:3]]), dtype=torch.float32, device=device)
+    init_rotate = Rotate(slice_util.quaternion_to_matrix(torch.FloatTensor(init_pose[3:])), dtype=torch.float32, device=device)
+    init_rotate_reverse = Rotate(slice_util.quaternion_to_matrix(torch.FloatTensor(slice_util.invert_rotation_quaternion(init_pose[3:]))), dtype=torch.float32, device=device)
+    translated_points = Transform3d(device=device).compose(init_rotate).transform_points(translated_points)
+    translated_points = Transform3d(device=device).compose(init_trans_reverse).transform_points(translated_points)
 
 
     transformation_elem = []
     total_temp_t = None
     if init_pose is not None and gt is None and trans_rotate is None:
-        #translated_points = vertices.clone().cpu().numpy()
-
-        init_trans_reverse = Translate(torch.FloatTensor([-init_pose[:3]]), dtype=torch.float32, device=device)
-        init_rotate_reverse = Rotate(slice_util.quaternion_to_matrix(torch.FloatTensor(slice_util.invert_rotation_quaternion(init_pose[3:]))), dtype=torch.float32, device=device)
-
-        transform_matrix = init_rotate_reverse.get_matrix()
-        rotation_matrix = transform_matrix[:, :3, :3]
-        euler_angles_degrees = torch.rad2deg(matrix_to_euler_angles(rotation_matrix, convention="XYZ"))
-        #print('init_rotate_reverse',euler_angles_degrees)
-        #print('init_pose',-init_pose[:3])
-        
-
-        init_trans = Translate(torch.FloatTensor([init_pose[:3]]), dtype=torch.float32, device=device)
-        init_rotate = Rotate(slice_util.quaternion_to_matrix(torch.FloatTensor(init_pose[3:])), dtype=torch.float32, device=device)
-        #print('init_trans',init_pose)
-        transform_matrix = init_rotate.get_matrix()
-        rotation_matrix = transform_matrix[:, :3, :3]
-        euler_angles_degrees = torch.rad2deg(matrix_to_euler_angles(rotation_matrix, convention="XYZ"))
-        #print('init_rotate',euler_angles_degrees)
-        #print('init_pose',init_pose[:3])
-        translated_points = Transform3d(device=device).compose(init_trans).transform_points(translated_points)
-        translated_points = Transform3d(device=device).compose(init_rotate).transform_points(translated_points)
         if False:
 
             init_trans = -init_pose[:3]
@@ -296,203 +281,58 @@ def transform_pc(device, vertices, init_pose, gt, trans_rotate, step, part_index
             translated_points = temp_t.transform_points(translated_points)#.to(torch.float).to(device)
 
     elif init_pose is not None and gt is not None and trans_rotate is None:
-        init_trans = init_pose[:3]
-        init_rotate = init_pose[3:]
-        #init_rotate = slice_util.invert_rotation_quaternion(init_pose[3:])
-        
-
-        
-        _mean = torch.mean(translated_points, axis=0)
-        tr_c = Translate(-_mean[0],-_mean[1],-_mean[2], dtype=torch.float32, device=device)
-        rr = Rotate(slice_util.quaternion_to_matrix(torch.FloatTensor(init_rotate)), dtype=torch.float32, device=device)  
-        tr_c_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32, device=device)
-        tr = Translate(torch.FloatTensor([init_trans]), dtype=torch.float32, device=device)
-
-        #temp_t = Transform3d(device=device).compose(tr_c).compose(rr).compose(tr_c_r).compose(tr)
-        temp_t = Transform3d(device=device).compose(tr).compose(tr_c_r).compose(rr).compose(tr_c)
-        translated_points = temp_t.transform_points(translated_points)#.to(torch.float).to(device)
-
-
-        gt_trans = gt[part_index,:3]
-        gt_rotate = gt[part_index,3:]
-        gt_rotate = slice_util.invert_rotation_quaternion(gt[part_index,3:])
-
-
-        _mean = torch.mean(translated_points, axis=0)
-        tr_c = Translate(-_mean[0],-_mean[1],-_mean[2], dtype=torch.float32, device=device)
-        rr = Rotate(slice_util.quaternion_to_matrix(torch.FloatTensor(gt_rotate)), dtype=torch.float32, device=device)  
-        tr_c_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32, device=device)
-        tr = Translate(torch.FloatTensor([gt_trans]), dtype=torch.float32, device=device)
-
-        temp_t = Transform3d(device=device).compose(tr).compose(tr_c_r).compose(rr).compose(tr_c)
-        translated_points = temp_t.transform_points(translated_points)#.to(torch.float).to(device)
-
-    elif init_pose is not None and gt is not None and trans_rotate is not None:
-        
-
-        '''
-        trans1 = Vector(-init_pose[:3])
-        trans_mat1 = Matrix.Translation(trans1)
-        rot_mat1 = Quaternion(init_pose[3:]).inverted().to_matrix().to_4x4()
-
-        trans2 = Vector(-gt_transformation[:3])
-        trans_mat2 = Matrix.Translation(trans2)
-        rot_mat2 = Quaternion(gt_transformation[3:]).inverted().to_matrix().to_4x4()
-
-        trans3 = Vector(transformation[:3])
-        trans_mat3 = Matrix.Translation(trans3)
-        rot_mat3 = Quaternion(transformation[3:]).normalized().to_matrix().to_4x4()
-
-        trans4 = Vector(init_pose[:3])
-        trans_mat4 = Matrix.Translation(trans4)
-        rot_mat4 = Quaternion(init_pose[3:]).to_matrix().to_4x4()
-
-        # rotate -> translate -> translate -> rotate -> rotate -> translate
-        final_transformation = rot_mat4 @ trans_mat4 @ trans_mat3 @ rot_mat3 @ rot_mat2 @ trans_mat2  @ trans_mat1 @ rot_mat1
-
-        '''
-        #x_trans = Translate(torch.FloatTensor([-1,0,0]), dtype=torch.float32, device=device)
-
-
-
-
-
-
-
-
-
-
-
-        init_trans_reverse = Translate(torch.FloatTensor([-init_pose[:3]]), dtype=torch.float32, device=device)
-        init_rotate_reverse = Rotate(slice_util.quaternion_to_matrix(torch.FloatTensor(slice_util.invert_rotation_quaternion(init_pose[3:]))), dtype=torch.float32, device=device)
 
         gt_trans_reverse = Translate(torch.FloatTensor([-gt[part_index,:3]]), dtype=torch.float32, device=device)
         gt_rotate_reverse = Rotate(slice_util.quaternion_to_matrix(torch.FloatTensor(slice_util.invert_rotation_quaternion(gt[part_index,3:]))), dtype=torch.float32, device=device)
+        gt_rotate = Rotate(slice_util.quaternion_to_matrix(torch.FloatTensor(gt[part_index,3:])), dtype=torch.float32, device=device)
         gt_trans = Translate(torch.FloatTensor([gt[part_index,:3]]), dtype=torch.float32, device=device)
 
+
+
+        translated_points = Transform3d(device=device).compose(gt_trans_reverse).transform_points(translated_points)
+        translated_points = Transform3d(device=device).compose(gt_rotate_reverse).transform_points(translated_points)
+
+        translated_points = Transform3d(device=device).compose(init_trans).transform_points(translated_points)
+        translated_points = Transform3d(device=device).compose(init_rotate_reverse).transform_points(translated_points)
+
+
+    elif init_pose is not None and gt is not None and trans_rotate is not None and step != -1:
+        
+        gt_trans_reverse = Translate(torch.FloatTensor([-gt[part_index,:3]]), dtype=torch.float32, device=device)
+        gt_rotate_reverse = Rotate(slice_util.quaternion_to_matrix(torch.FloatTensor(slice_util.invert_rotation_quaternion(gt[part_index,3:]))), dtype=torch.float32, device=device)
+        
+        pred_trans = Translate(torch.FloatTensor([trans_rotate[step, part_index,:3]]), dtype=torch.float32, device=device)
+        pred_rotate = Rotate(slice_util.quaternion_to_matrix(torch.FloatTensor(trans_rotate[step, part_index,3:])), dtype=torch.float32, device=device)
+
+
+        translated_points = Transform3d(device=device).compose(gt_trans_reverse).transform_points(translated_points)
+        translated_points = Transform3d(device=device).compose(gt_rotate_reverse).transform_points(translated_points)
+        
+
+        translated_points = Transform3d(device=device).compose(pred_rotate).transform_points(translated_points)
+        translated_points = Transform3d(device=device).compose(pred_trans).transform_points(translated_points)
+
+
+        translated_points = Transform3d(device=device).compose(init_trans).transform_points(translated_points)
+        translated_points = Transform3d(device=device).compose(init_rotate_reverse).transform_points(translated_points)
+
+    elif init_pose is not None and gt is not None and trans_rotate is not None and step == -1:
+        
 
         pred_trans = Translate(torch.FloatTensor([trans_rotate[step, part_index,:3]]), dtype=torch.float32, device=device)
         pred_trans_reverse = Translate(torch.FloatTensor([-trans_rotate[step, part_index,:3]]), dtype=torch.float32, device=device)
         pred_rotate = Rotate(slice_util.quaternion_to_matrix(torch.FloatTensor(trans_rotate[step, part_index,3:])), dtype=torch.float32, device=device)
-
-        init_trans = Translate(torch.FloatTensor([init_pose[:3]]), dtype=torch.float32, device=device)
-        init_rotate = Rotate(slice_util.quaternion_to_matrix(torch.FloatTensor(init_pose[3:])), dtype=torch.float32, device=device)
-        
-
-
-        #_mean = torch.mean(translated_points, axis=0)
-        #tr_c = Translate(-_mean[0],-_mean[1],-_mean[2], dtype=torch.float32, device=device)
-        #tr_c_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32, device=device)
-        translated_points = Transform3d(device=device).compose(init_rotate_reverse).transform_points(translated_points)
-        translated_points = Transform3d(device=device).compose(init_trans).transform_points(translated_points)
-        translated_points = Transform3d(device=device).compose(gt_trans).transform_points(translated_points)
-        translated_points = Transform3d(device=device).compose(gt_rotate_reverse).transform_points(translated_points)
-        translated_points = Transform3d(device=device).compose(pred_rotate).transform_points(translated_points)
-        translated_points = Transform3d(device=device).compose(pred_trans_reverse).transform_points(translated_points)
-        #translated_points = Transform3d(device=device).compose(init_trans_reverse).transform_points(translated_points)
-        #translated_points = Transform3d(device=device).compose(init_rotate).transform_points(translated_points)
+        pred_rotate_reverse = Rotate(slice_util.quaternion_to_matrix(torch.FloatTensor(slice_util.invert_rotation_quaternion(trans_rotate[step, part_index,3:]))), dtype=torch.float32, device=device)
   
-    
-        '''
-        translated_points = _rotate_whole_part_xyz(translated_points,init_rotate)
-        translated_points = _recenter_ref(translated_points,init_trans, 0)
 
-        translated_points = _recenter_pc(translated_points, gt[part_index,:3])
-        translated_points = _rotate_pc_xyz(translated_points, gt[part_index,3:])
-
-
-        _scale = np.max(np.abs(translated_points), axis=(1,2), keepdims=True)
-        #_scale = torch.max(torch.abs(translated_points), dim=1, keepdim=True).values
-        _scale[_scale == 0] = 1
-        #translated_points = translated_points / _scale
-        '''
-
-        #translated_points = puzzle_transform.transform_pc(trans_rotate[step, part_index,:3], trans_rotate[step, part_index,3:], translated_points)
-        #translated_points = Transform3d(device=device).compose(tr_c).transform_points(translated_points)
-#        translated_points = Transform3d(device=device).compose(pred_rotate).transform_points(translated_points)
-        #translated_points = Transform3d(device=device).compose(tr_c_r).transform_points(translated_points)
-        #translated_points = Transform3d(device=device).compose(pred_trans).transform_points(translated_points)
-
-
-
-        '''
-        rr = RotateAxisAngle(angle=45, axis="Y", device=device)
-        if step % 4 == 0:
-            temp_t = Transform3d(device=device)
-            translated_points = temp_t.transform_points(translated_points)#.to(torch.float).to(device)
-        elif step % 4 == 1:
-            temp_t = Transform3d(device=device).compose(tr_c)
-            translated_points = temp_t.transform_points(translated_points)#.to(torch.float).to(device)
-        elif step % 4 == 2:
-            translated_points = Transform3d(device=device).compose(tr_c).transform_points(translated_points)#.to(torch.float).to(device)
-            translated_points = Transform3d(device=device).compose(rr).transform_points(translated_points)#.to(torch.float).to(device)
-            
-        else:
-            translated_points = Transform3d(device=device).compose(tr_c).transform_points(translated_points)#.to(torch.float).to(device)
-            translated_points = Transform3d(device=device).compose(rr).transform_points(translated_points)#.to(torch.float).to(device)
-            translated_points = Transform3d(device=device).compose(tr_c_r).transform_points(translated_points)#.to(torch.float).to(device)
-
-        '''
-        '''
-        temp_t = Transform3d(device=device) \
-            .compose(init_trans_reverse).compose(init_rotate_reverse) \
-            .compose(gt_trans_reverse).compose(gt_rotate_reverse) \
-            .compose(pred_rotate).compose(pred_trans) \
-            .compose(init_trans).compose(init_rotate)
-        '''
+        translated_points = Transform3d(device=device).compose(gt_trans_reverse).transform_points(translated_points)
+        translated_points = Transform3d(device=device).compose(gt_rotate_reverse).transform_points(translated_points)
         
-        
-        '''
-        init_rotate = init_pose[3:]
-        init_rotate = slice_util.invert_rotation_quaternion(init_pose[3:])
-        #print("init_rotate",slice_util.quaternion_to_matrix(torch.FloatTensor(init_rotate)))
+        translated_points = Transform3d(device=device).compose(pred_rotate).transform_points(translated_points)
+        translated_points = Transform3d(device=device).compose(pred_trans).transform_points(translated_points)
 
-        
-        _mean = torch.mean(translated_points, axis=0)
-        tr_c = Translate(-_mean[0],-_mean[1],-_mean[2], dtype=torch.float32, device=device)
-        rr = Rotate(slice_util.quaternion_to_matrix(torch.FloatTensor(init_rotate)), dtype=torch.float32, device=device)  
-        tr_c_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32, device=device)
-        
-
-        temp_t = Transform3d(device=device).compose(tr_c).compose(rr).compose(tr_c_r).compose(tr)
-        #temp_t = Transform3d(device=device).compose(tr)
-        translated_points = temp_t.transform_points(translated_points)#.to(torch.float).to(device)
-        transformation_elem.extend([tr_c,rr,tr_c_r,tr])
-        
-        gt_trans = gt[part_index,:3]
-        gt_rotate = gt[part_index,3:]
-        #gt_rotate = slice_util.invert_rotation_quaternion(gt[part_index,3:])
-        #print("gt_rotate",slice_util.quaternion_to_matrix(torch.FloatTensor(gt_rotate)))
-
-        _mean = torch.mean(translated_points, axis=0)
-        tr_c = Translate(-_mean[0],-_mean[1],-_mean[2], dtype=torch.float32, device=device)
-        rr = Rotate(slice_util.quaternion_to_matrix(torch.FloatTensor(gt_rotate)), dtype=torch.float32, device=device)  
-        tr_c_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32, device=device)
-        tr = Translate(torch.FloatTensor([gt_trans]), dtype=torch.float32, device=device)
-
-        temp_t = Transform3d(device=device).compose(tr_c).compose(rr).compose(tr_c_r).compose(tr)
-        translated_points = temp_t.transform_points(translated_points)#.to(torch.float).to(device)
-        transformation_elem.extend([tr_c,rr,tr_c_r,tr])
-        
-        trans = trans_rotate[step, part_index,:3]
-        rotate =trans_rotate[step, part_index,3:]
-        
-        _mean = torch.mean(translated_points, axis=0)
-        tr_c = Translate(-_mean[0],-_mean[1],-_mean[2], dtype=torch.float32, device=device)
-        #print("rotate",rotate.shape, slice_util.quaternion_to_matrix(torch.FloatTensor(rotate)))
-        #print("360",get_euler_angles_from_quaternion_gpu(torch.FloatTensor(rotate)))
-        rr = Rotate(slice_util.quaternion_to_matrix(torch.FloatTensor(rotate)), dtype=torch.float32, device=device)  
-        tr_c_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32, device=device)
-        tr = Translate(torch.FloatTensor([trans]), dtype=torch.float32, device=device)
-
-        temp_t = Transform3d(device=device).compose(tr_c).compose(rr).compose(tr_c_r).compose(tr)
-        translated_points = temp_t.transform_points(translated_points)#.to(torch.float).to(device)
-        
-        transformation_elem.extend([tr_c,rr,tr_c_r,tr])
-        total_temp_t = Transform3d(device=device)
-        for t in transformation_elem:
-            total_temp_t = total_temp_t.compose(t)
-        '''
+        translated_points = Transform3d(device=device).compose(init_trans).transform_points(translated_points)
+        translated_points = Transform3d(device=device).compose(init_rotate_reverse).transform_points(translated_points)
 
     return translated_points, total_temp_t
 
@@ -500,13 +340,13 @@ def get_renderer(device, xlim=(-2, 2),ylim=(-2, 2),zlim=(-2, 2)):
     image_size = 512
     radius = 0.002
     points_per_pixel = 50
-    R, T = look_at_view_transform(20, 45, 45) #10,30,90
+    R, T = look_at_view_transform(10, 45, 45) #10,30,90
     cameras = FoVOrthographicCameras( device=device, R=R, T=T, znear=zlim[0], zfar=zlim[1], min_x=xlim[0], max_x=xlim[1], min_y=ylim[0], max_y=ylim[1])
 
-    R, T = look_at_view_transform(20, 0, 0)
+    R, T = look_at_view_transform(10, 0, 0)
     cameras_front = FoVOrthographicCameras( device=device, R=R, T=T, znear=zlim[0], zfar=zlim[1], min_x=xlim[0], max_x=xlim[1], min_y=ylim[0], max_y=ylim[1])
     
-    R, T = look_at_view_transform(20, 90, 0)
+    R, T = look_at_view_transform(10, 90, 0)
     cameras_down = FoVOrthographicCameras( device=device, R=R, T=T, znear=zlim[0], zfar=zlim[1], min_x=xlim[0], max_x=xlim[1], min_y=ylim[0], max_y=ylim[1])
 
     raster_settings = PointsRasterizationSettings(
@@ -589,7 +429,8 @@ def axis_draw(renderer,renderer_front,renderer_down, device):
     return axis_pcd_rendered, axis_pcd_rendered_front, axis_pcd_rendered_down
 
 def pcd_list_2_img(device,
-    part_pcs_gt11,original_vertices,
+    predict_0,
+    part_pcs_gt11,original_vertices,part_valids,
     output_img_file_name_original,
     output_img_file_name_original_front,
     output_img_file_name_original_down,
@@ -599,6 +440,9 @@ def pcd_list_2_img(device,
     output_img_file_name_init_gt,
     output_img_file_name_init_gt_front,
     output_img_file_name_init_gt_down,
+    output_img_file_name_final,
+    output_img_file_name_final_front,
+    output_img_file_name_final_down,
     alpha=.8,
     max_points=10000,
     xlim=(-1, 1),
@@ -622,9 +466,15 @@ def pcd_list_2_img(device,
     img_data_list_init_gt = []
     img_data_list_init_gt_front = []
     img_data_list_init_gt_down = []
+    img_data_list_final = []
+    img_data_list_final_front = []
+    img_data_list_final_down = []
     for _i, vertices in enumerate(tqdm(original_vertices, desc='gen snapshot images')):
         #print(pcd_file_name)
         #vertices = vertices.cpu()
+
+        if not part_valids[_i]:
+            continue
         if isinstance(vertices, np.ndarray):
             vertices = torch.from_numpy(vertices).to(device).to(torch.float)
         else:
@@ -644,8 +494,8 @@ def pcd_list_2_img(device,
         
         translated_points_init, _ = transform_pc(device, translated_points, init_pose, None, None, -1, _i)
         translated_points_init_gt, _ = transform_pc(device, translated_points, init_pose, gt, None, -1, _i)
+        translated_points_final, _ = transform_pc(device, translated_points, init_pose, gt, predict_0, 19, _i)
 
-        
         #print(_i, torch.FloatTensor([transform[_i,3:]]), torch.min(translated_points,axis=0)[0],torch.max(translated_points,axis=0)[0])
 
         colors = torch.ones_like(translated_points) * torch.tensor(tab10_r.colors[(_i)%len(tab10_r.colors)][:3]).to(device)  # blue points
@@ -653,6 +503,7 @@ def pcd_list_2_img(device,
         pcd_original = pytorch3d.structures.Pointclouds(points=[vertices], features=[colors.to(torch.float)])
         pcd_init = pytorch3d.structures.Pointclouds(points=[translated_points_init], features=[colors.to(torch.float)])
         pcd_init_gt = pytorch3d.structures.Pointclouds(points=[translated_points_init_gt], features=[colors.to(torch.float)])
+        pcd_final = pytorch3d.structures.Pointclouds(points=[translated_points_final], features=[colors.to(torch.float)])
         
 
         #print('pcd_original', torch.min(vertices,axis=0)[0], torch.max(vertices,axis=0)[0])
@@ -672,6 +523,10 @@ def pcd_list_2_img(device,
         img_data_list_init_gt_front.append((renderer_front(pcd_init_gt)[0].cpu().numpy()*255).astype(np.uint8))
         img_data_list_init_gt_down.append((renderer_down(pcd_init_gt)[0].cpu().numpy()*255).astype(np.uint8))
 
+        img_data_list_final.append((renderer(pcd_final)[0].cpu().numpy()*255).astype(np.uint8))
+        img_data_list_final_front.append((renderer_front(pcd_final)[0].cpu().numpy()*255).astype(np.uint8))
+        img_data_list_final_down.append((renderer_down(pcd_final)[0].cpu().numpy()*255).astype(np.uint8))
+
     axis_pcd_rendered, axis_pcd_rendered_front, axis_pcd_rendered_down = axis_draw(renderer, renderer_front, renderer_down, device)
     img_data_list_original.extend(axis_pcd_rendered)
     img_data_list_original_front.extend(axis_pcd_rendered_front)
@@ -683,17 +538,24 @@ def pcd_list_2_img(device,
     img_data_list_init_gt_front.extend(axis_pcd_rendered_front)
     img_data_list_init_gt_down.extend(axis_pcd_rendered_down)
 
-    imageio.mimsave(output_img_file_name_original, [sum_arrays(img_data_list_original)], format='PNG')
-    imageio.mimsave(output_img_file_name_original_front, [sum_arrays(img_data_list_original_front)], format='PNG')
-    imageio.mimsave(output_img_file_name_original_down, [sum_arrays(img_data_list_original_down)], format='PNG')
-    imageio.mimsave(output_img_file_name_init, [sum_arrays(img_data_list_init)], format='PNG')
-    imageio.mimsave(output_img_file_name_init_front, [sum_arrays(img_data_list_init_front)], format='PNG')
-    imageio.mimsave(output_img_file_name_init_down, [sum_arrays(img_data_list_init_down)], format='PNG')
-    imageio.mimsave(output_img_file_name_init_gt, [sum_arrays(img_data_list_init_gt)], format='PNG')
-    imageio.mimsave(output_img_file_name_init_gt_front, [sum_arrays(img_data_list_init_gt_front)], format='PNG')
-    imageio.mimsave(output_img_file_name_init_gt_down, [sum_arrays(img_data_list_init_gt_down)], format='PNG')
+    img_data_list_final.extend(axis_pcd_rendered)
+    img_data_list_final_front.extend(axis_pcd_rendered_front)
+    img_data_list_final_down.extend(axis_pcd_rendered_down)
 
-def gt_img(device, part_pcs_gt, original_vertices, inference_result_dir, output_dir, obj_id_list):
+    imageio.mimsave(output_img_file_name_original, [sum_arrays(img_data_list_original,0)], format='PNG')
+    imageio.mimsave(output_img_file_name_original_front, [sum_arrays(img_data_list_original_front,0)], format='PNG')
+    imageio.mimsave(output_img_file_name_original_down, [sum_arrays(img_data_list_original_down,0)], format='PNG')
+    imageio.mimsave(output_img_file_name_init, [sum_arrays(img_data_list_init,0)], format='PNG')
+    imageio.mimsave(output_img_file_name_init_front, [sum_arrays(img_data_list_init_front,0)], format='PNG')
+    imageio.mimsave(output_img_file_name_init_down, [sum_arrays(img_data_list_init_down,0)], format='PNG')
+    imageio.mimsave(output_img_file_name_init_gt, [sum_arrays(img_data_list_init_gt,0)], format='PNG')
+    imageio.mimsave(output_img_file_name_init_gt_front, [sum_arrays(img_data_list_init_gt_front,0)], format='PNG')
+    imageio.mimsave(output_img_file_name_init_gt_down, [sum_arrays(img_data_list_init_gt_down,0)], format='PNG')
+    imageio.mimsave(output_img_file_name_final, [sum_arrays(img_data_list_final,0)], format='PNG')
+    imageio.mimsave(output_img_file_name_final_front, [sum_arrays(img_data_list_final_front,0)], format='PNG')
+    imageio.mimsave(output_img_file_name_final_down, [sum_arrays(img_data_list_final_down,0)], format='PNG')
+
+def gt_img(device, part_pcs_gt, original_vertices, part_valids, inference_result_dir, output_dir, obj_id_list):
 
     data_id = inference_result_dir.split("/")[-1]
     os.makedirs(f'{output_dir}/{data_id}',exist_ok=True)
@@ -702,10 +564,14 @@ def gt_img(device, part_pcs_gt, original_vertices, inference_result_dir, output_
     gt = np.load(f'{inference_result_dir}/gt.npy')
     init_pose = np.load(f'{inference_result_dir}/init_pose.npy')
 
-    pcd_list_2_img(device, part_pcs_gt, original_vertices,
+    predict_file_name = glob.glob(f'{inference_result_dir}/predict*')[0]
+    predict_0 = np.load(predict_file_name)
+
+    pcd_list_2_img(device, predict_0, part_pcs_gt, original_vertices,part_valids,
         f'{output_dir}/{data_id}/{"original"}.png',f'{output_dir}/{data_id}/{"original_front"}.png',f'{output_dir}/{data_id}/{"original_down"}.png',
         f'{output_dir}/{data_id}/{"init"}.png', f'{output_dir}/{data_id}/{"init_front"}.png', f'{output_dir}/{data_id}/{"init_down"}.png', 
         f'{output_dir}/{data_id}/{"init_gt"}.png',f'{output_dir}/{data_id}/{"init_gt_front"}.png',f'{output_dir}/{data_id}/{"init_gt_down"}.png',
+        f'{output_dir}/{data_id}/{"final"}.png',f'{output_dir}/{data_id}/{"final_front"}.png',f'{output_dir}/{data_id}/{"final_down"}.png',
         init_pose = init_pose,
         gt = gt)
 
@@ -715,6 +581,202 @@ def gt_img(device, part_pcs_gt, original_vertices, inference_result_dir, output_
 
 
 def plot_pointcloud2_same_with_part_acc(
+    device,
+    output_dir,
+    part_pcs_gt11, original_vertices,
+    part_valids,
+    obj_id_list,
+    init_pose, gt,
+    predict_0,
+    alpha=.8,
+    title=None,
+    max_points=10000,
+    xlim=(-1, 1),
+    ylim=(-1, 1),
+    zlim=(-1, 1)
+    ):
+    """Plot a pointcloud tensor of shape (N, coordinates)
+    """
+
+   
+
+
+    renderer, renderer_front,renderer_down = get_renderer(device)
+    
+
+    os.makedirs(output_dir+"/iteration/data", exist_ok = True)
+
+    os.makedirs(output_dir+"/trans_diff", exist_ok = True)
+
+    os.makedirs(output_dir+"/trans", exist_ok = True)
+    os.makedirs(output_dir+"/init_gt", exist_ok = True)
+    #fig = plt.figure(figsize=(25,20))
+    #predict_0[:,:,5:] = np.zeros((predict_0.shape[0],predict_0.shape[1],2))
+    #predict_0[:,:,4:5] = np.ones((predict_0.shape[0],predict_0.shape[1],1))
+    #print('predict_0',predict_0.shape)
+ 
+    axis_pcd_rendered, axis_pcd_rendered_front, axis_pcd_rendered_down = axis_draw(renderer, renderer_front,renderer_down, device)
+
+  
+
+
+    for _step in tqdm(range(-1,predict_0.shape[0])):
+            
+        pts_pred = []
+        mse_r_list = []
+        mse_t_list = []
+
+        images = []
+        images_front = []
+        images_down = []
+        image_index_2_text = {}
+        image_index_2_color = {}
+        image_index_2_dice_score = {}
+
+        for _part_idx, vertices in enumerate(original_vertices):
+            #print(pcd_file_name)
+            #vertices = vertices.cpu()
+            if not part_valids[_part_idx]:
+                continue
+
+            if isinstance(vertices, np.ndarray):
+                vertices = torch.from_numpy(vertices).to(device).to(torch.float)
+            else:
+                vertices = vertices.to(device).to(torch.float)
+            translated_points = vertices
+ 
+            if _step == -1:
+                #print("########################################")
+                translated_points_final, _ = transform_pc(device, translated_points, init_pose, gt, None, _step, _part_idx)
+            else:
+                translated_points_final, _ = transform_pc(device, translated_points, init_pose, gt, predict_0, _step, _part_idx)
+            
+
+            if isinstance(translated_points_final, np.ndarray):
+                _cur_part_pcd = torch.from_numpy(translated_points_final).to(device).float()
+            else:
+                _cur_part_pcd = translated_points_final.to(device).float()
+
+            colors = torch.ones_like(_cur_part_pcd).to(device) * torch.tensor(tab10_r.colors[_part_idx%20][:3]).to(device)  # blue points
+
+            point_cloud = pytorch3d.structures.Pointclouds(points=[_cur_part_pcd], features=[colors.to(torch.float)])
+
+            image_index_2_text[_part_idx] = torch.min(_cur_part_pcd,axis=0)[0][1].item()
+            #print(_s, _i, torch.min(translated_points,axis=0))
+
+
+            if _part_idx >= 1:
+                
+                shape_cd_min = slice_util.calculate_dice_score_from_point_clouds((translated_points_pre - torch.mean(translated_points_pre, axis=0)).cpu().numpy(),
+                (_cur_part_pcd - torch.mean(_cur_part_pcd, axis=0)).cpu().numpy() )
+                image_index_2_dice_score[_part_idx] = shape_cd_min
+            translated_points_pre = _cur_part_pcd
+
+
+            if _step == predict_0.shape[0] - 1: # the last iteration
+                with open(f'{output_dir}/trans_diff/{_part_idx}.obj', 'w') as outfile:
+                    for _arr in _cur_part_pcd:
+                        outfile.write(f'v {_arr[0]} {_arr[1]} {_arr[2]}\n')
+
+            if _step == predict_0.shape[0]-1: # the last iteration
+
+                #translated_points_init_gt, _ = transform_pc(device, vertices, init_pose, gt, None, _s, _i)
+                #with open(f'{output_dir}/init_gt/{_i}.obj', 'w') as outfile:
+                #    for _arr in translated_points_init_gt.cpu().numpy():
+                #        outfile.write(f'v {_arr[0]} {_arr[1]} {_arr[2]}\n')
+
+                with open(f'{output_dir}/trans/{_part_idx}.obj', 'w') as outfile:
+                    for _arr in _cur_part_pcd:
+                        outfile.write(f'v {_arr[0]} {_arr[1]} {_arr[2]}\n')
+
+
+            #translated_points = vertices.to(device)
+            image_index_2_color[_part_idx] = tab10_r.colors[_part_idx%20][:3]
+
+
+            images.append((renderer(point_cloud).cpu().numpy()*255).astype(np.uint8))
+            images_front.append((renderer_front(point_cloud).cpu().numpy()*255).astype(np.uint8))
+            images_down.append((renderer_down(point_cloud).cpu().numpy()*255).astype(np.uint8))
+        images.extend(axis_pcd_rendered)
+        images_front.extend(axis_pcd_rendered_front)
+        images_down.extend(axis_pcd_rendered_down)
+
+        images = sum_arrays(images,0)
+        images_front = sum_arrays(images_front,0)
+        images_down = sum_arrays(images_down,0)
+        imageio.mimsave(f'{output_dir}/iteration/{_step}.png', [images[0]], format='PNG')
+        imageio.mimsave(f'{output_dir}/iteration/{_step}_front.png', [images_front[0]], format='PNG')
+        imageio.mimsave(f'{output_dir}/iteration/{_step}_down.png', [images_down[0]], format='PNG')
+        
+
+
+
+
+
+        sorted_image_index_2_text = sorted(image_index_2_text.items(), key=lambda item: item[1] ,reverse=True)
+        
+        slice_pos_text = []
+        slice_pos_text.append(f'iteration {1} / step {_step}')
+        slice_pos_text.append(f'id : y : dice')
+        for imaage_id, text in sorted_image_index_2_text:
+
+
+
+            if imaage_id >= 1: # and _step > 19 :                
+                #if _step - 19 >= imaage_id:
+                #    slice_pos_text.append(f'{obj_id_list[imaage_id]} : {text:.3f} : {image_index_2_dice_score[imaage_id]:.3f} **')
+                #else:
+                slice_pos_text.append(f'{obj_id_list[imaage_id]} : {text:.3f} : {image_index_2_dice_score[imaage_id]:.3f} / {imaage_id}|{imaage_id-1}')
+            else:
+                slice_pos_text.append(f'{obj_id_list[imaage_id]} : {text:.3f}')
+                #slice_pos_text.append(f'recenter -> random rotation')
+            
+        add_text_to_png(f'{output_dir}/iteration/{_step}.png', slice_pos_text, f'{output_dir}/iteration/{_step}.png')
+        add_text_to_png(f'{output_dir}/iteration/{_step}_front.png', slice_pos_text, f'{output_dir}/iteration/{_step}_front.png')
+        add_text_to_png(f'{output_dir}/iteration/{_step}_down.png', slice_pos_text, f'{output_dir}/iteration/{_step}_down.png')
+        
+
+
+
+
+    #plt.show(fig)
+    _last_obj_flies  = glob.glob(f'{output_dir}/trans_diff/{"*"}.obj')
+    slice_util.combine_obj_files(_last_obj_flies,f'{output_dir}/combined_diff.obj')
+    _last_obj_flies  = glob.glob(f'{output_dir}/trans/{"*"}.obj')
+    slice_util.combine_obj_files(_last_obj_flies,f'{output_dir}/combined_diff_rotate.obj')
+
+    w = iio.get_writer(f'{output_dir}/video.mp4', format='FFMPEG', mode='I', fps=2,
+                        #codec='h264_vaapi',
+                        pixelformat='yuv420p')
+    
+    for _step in range(-1, predict_0.shape[0]):
+        w.append_data(iio.imread(f'{output_dir}/iteration/{_step}.png'))
+
+    w.close()
+
+
+    w = iio.get_writer(f'{output_dir}/video_front.mp4', format='FFMPEG', mode='I', fps=2,
+                        #codec='h264_vaapi',
+                        pixelformat='yuv420p')
+    
+    for _step in range(-1, predict_0.shape[0]):
+        w.append_data(iio.imread(f'{output_dir}/iteration/{_step}_front.png'))
+
+    w.close()
+
+    w = iio.get_writer(f'{output_dir}/video_down.mp4', format='FFMPEG', mode='I', fps=2,
+                        #codec='h264_vaapi',
+                        pixelformat='yuv420p')
+    
+    for _step in range(-1, predict_0.shape[0]):
+        w.append_data(iio.imread(f'{output_dir}/iteration/{_step}_down.png'))
+
+    w.close()
+
+    return
+
+
+def plot_pointcloud2_same_with_part_acc_backup(
     device,
     output_dir,
     part_pcs_gt11, original_vertices,
@@ -735,7 +797,7 @@ def plot_pointcloud2_same_with_part_acc(
 
 
     renderer, renderer_front,renderer_down = get_renderer(device)
-
+    
 
     os.makedirs(output_dir+"/iteration/data", exist_ok = True)
 
@@ -747,22 +809,19 @@ def plot_pointcloud2_same_with_part_acc(
     #predict_0[:,:,5:] = np.zeros((predict_0.shape[0],predict_0.shape[1],2))
     #predict_0[:,:,4:5] = np.ones((predict_0.shape[0],predict_0.shape[1],1))
     #print('predict_0',predict_0.shape)
-  
-  
-  
-  
-  
+    
     translated_points = _rotate_whole_part_xyz(original_vertices, init_pose[3:], True)
     #translated_points = Transform3d(device=device).compose(init_rotate).transform_points(translated_points)#
     #for i in range(10):
     #    print(i, np.mean(translated_points[i], axis=0))
     translated_points = _recenter_centroid(translated_points,init_pose[:3])
-
     #print("===========================")
     #for i in range(10):
     #    print(i, np.mean(translated_points[i], axis=0))
+    axis_pcd_rendered, axis_pcd_rendered_front, axis_pcd_rendered_down = axis_draw(renderer, renderer_front,renderer_down, device)
+
     new_pc = []
-    for i in range(10):
+    for i in range(len(translated_points)):
         pc = translated_points[i]
         #print(i,gt[i,:3])
         pc = _recenter_pc(pc,gt[i,:3])
@@ -770,19 +829,20 @@ def plot_pointcloud2_same_with_part_acc(
         new_pc.append(pc)
     #new_pc = np.array(new_pc)
 
-    axis_pcd_rendered, axis_pcd_rendered_front, axis_pcd_rendered_down = axis_draw(renderer, renderer_front,renderer_down, device)
-
 
     for _step in tqdm(range(20)):
             
         pts_pred = []
         mse_r_list = []
         mse_t_list = []
-        for i in range(10):
+        for i in range(len(translated_points)):
             pc = new_pc[i]
             #print(i,gt[i,:3])
             #pc = _rotate_pc_xyz(pc,gt[i,3:], True)
             #pc = _recenter_pc(pc,-gt[i,:3])
+
+
+            
             pc = _rotate_pc_xyz(pc,predict_0[_step][i,3:], True)
             pc = _recenter_pc(pc,-predict_0[_step][i,:3])
 
@@ -798,6 +858,7 @@ def plot_pointcloud2_same_with_part_acc(
             pts_pred = np.stack(pts_pred)
         except:
             pass
+
 
         pts_pred = _recenter_centroid(pts_pred,init_pose[:3], inverted=True)
         pts_pred = _rotate_whole_part_xyz(pts_pred, init_pose[3:], False)
@@ -859,9 +920,9 @@ def plot_pointcloud2_same_with_part_acc(
         images_front.extend(axis_pcd_rendered_front)
         images_down.extend(axis_pcd_rendered_down)
 
-        images = sum_arrays(images)
-        images_front = sum_arrays(images_front)
-        images_down = sum_arrays(images_down)
+        images = sum_arrays(images,0)
+        images_front = sum_arrays(images_front,0)
+        images_down = sum_arrays(images_down,0)
         imageio.mimsave(f'{output_dir}/iteration/{_step}.png', [images[0]], format='PNG')
         imageio.mimsave(f'{output_dir}/iteration/{_step}_front.png', [images_front[0]], format='PNG')
         imageio.mimsave(f'{output_dir}/iteration/{_step}_down.png', [images_down[0]], format='PNG')
@@ -1311,7 +1372,7 @@ def get_y_rotation_angle_360(q) -> float:
         
     return normalized_angle
 
-def make_video(device, part_pcs_gt11, original_vertices, inference_dir, output_dir, obj_id_list, dice_process = False):
+def make_video(device, part_pcs_gt11, original_vertices, part_valids, inference_dir, output_dir, obj_id_list, dice_process = False):
     
         
     data_id = inference_dir.rsplit("/",1)[1]
@@ -1324,7 +1385,7 @@ def make_video(device, part_pcs_gt11, original_vertices, inference_dir, output_d
     
     predict_file_name = glob.glob(f'{inference_dir}/predict*')[0]
     predict_0 = np.load(predict_file_name)
-    
+
 
 
 
@@ -1431,7 +1492,7 @@ def make_video(device, part_pcs_gt11, original_vertices, inference_dir, output_d
     os.makedirs(f'{output_dir}/{data_id}', exist_ok=True)
 
     #plot_pointcloud2(device, f'{output_dir}/{data_id}',part_pcs_gt, obj_id_list, init_pose, gt, predict_rotated, xlim=(-2, 2), ylim=(-2, 2), zlim=(-2, 2))
-    plot_pointcloud2_same_with_part_acc(device, f'{output_dir}/{data_id}',part_pcs_gt11,original_vertices, obj_id_list, init_pose, gt, predict_rotated, xlim=(-2, 2), ylim=(-2, 2), zlim=(-2, 2))
+    plot_pointcloud2_same_with_part_acc(device, f'{output_dir}/{data_id}',part_pcs_gt11,original_vertices, part_valids, obj_id_list, init_pose, gt, predict_rotated, xlim=(-2, 2), ylim=(-2, 2), zlim=(-2, 2))
 
 
 

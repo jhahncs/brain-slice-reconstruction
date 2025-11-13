@@ -144,7 +144,7 @@ def rotate_y_axis(rot, pc):
                 #tr = Translate(-_mean[...,0],-_mean[...,1],-_mean[...,2], dtype=torch.float32).to(pcd.device)
                 #tr_r = Translate(_mean[...,0],_mean[...,1],_mean[...,2], dtype=torch.float32).to(pcd.device)
                 rr = Rotate(quaternion_to_matrix(rot[index_in_a_batch][index_in_a_object]), dtype=torch.float32).to(pcd.device)
-                #print('@@@@@@@@@@@@@@@@@',tr.device, pcd.device)
+                
                 #new_pcd = Transform3d(device=pc.device).compose(tr).transform_points(pcd)
                 new_pcd = Transform3d(device=pcd.device).compose(rr).transform_points(pcd)
                 #new_pcd = Transform3d(device=pc.device).compose(tr_r).transform_points(new_pcd)

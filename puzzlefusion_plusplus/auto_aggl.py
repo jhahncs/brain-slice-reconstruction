@@ -13,6 +13,9 @@ from puzzlefusion_plusplus.denoiser.evaluation.evaluator import (
     rot_metrics,
     calc_shape_cd
 )
+import importlib
+import verifier_utils
+importlib.reload(verifier_utils)
 import numpy as np
 from puzzlefusion_plusplus.denoiser.model.modules.custom_diffusers import PiecewiseScheduler
 from pytorch3d import transforms
@@ -121,13 +124,14 @@ class AutoAgglomerative(pl.LightningModule):
 
         return noise_rotate
 
+        
     def test_denoiser_only(self, data_dict):
         gt_trans = data_dict['part_trans']
         gt_rots = data_dict['part_rots']
         gt_trans_and_rots = torch.cat([gt_trans, gt_rots], dim=-1)
 
 
-        noisy_trans_and_rots = torch.randn(gt_trans_and_rots.shape, device=self.device) 
+        noisy_trans_and_rots = torch.randn(gt_trans_and_rots.shape, device=self.device)
         
         #noise_trans = torch.randn(gt_trans.shape, device=self.device)
         #noise_rotate = self.random_rotation_tensor(gt_rots)
@@ -139,8 +143,8 @@ class AutoAgglomerative(pl.LightningModule):
 
         reference_gt_and_rots = torch.zeros_like(gt_trans_and_rots, device=self.device)
         reference_gt_and_rots[ref_part] = gt_trans_and_rots[ref_part]
-
-        noisy_trans_and_rots[ref_part] = reference_gt_and_rots[ref_part]
+        
+        noisy_trans_and_rots[ref_part] = reference_gt_and_rots[ref_part].float()
         
         if self.rotation_1d:
             reference_gt_and_rots[...,4] = torch.repeat_interleave(torch.Tensor([0]), reference_gt_and_rots.shape[-2], dim=0).unsqueeze(dim=0)
@@ -185,13 +189,37 @@ class AutoAgglomerative(pl.LightningModule):
 
             all_pred_trans_rots.append(noisy_trans_and_rots.detach().cpu().numpy())
             
+                    
+        save_dir = os.path.join(
+            self.cfg.experiment_output_path,
+            "inference", 
+            self.cfg.inference_dir)
+        
+        print('save_dir',save_dir)
+        os.makedirs(save_dir, exist_ok=True)
+
         pts = data_dict['part_pcs']
         pred_trans = noisy_trans_and_rots[..., :3]
         pred_rots = noisy_trans_and_rots[..., 3:]
 
+
+        pts1 = transform_pc(pred_trans, pred_rots, pts)
+
+        np.save(save_dir+'/t_pts.npy',pts1.cpu())
+        
         expanded_part_scale = data_dict["part_scale"].unsqueeze(-1).expand(-1, -1, 1000, -1)
+        np.save(save_dir+'/t_expanded_part_scale.npy',expanded_part_scale.cpu())
         pts = pts * expanded_part_scale
         all_pred_trans_rots = np.array(all_pred_trans_rots)
+
+
+        np.save(save_dir+'/t_pts_expanded.npy',pts.cpu())
+
+        np.save(save_dir+'/t_part_valids.npy',part_valids.cpu())
+        np.save(save_dir+'/t_noisy_trans_and_rots.npy',noisy_trans_and_rots.cpu())
+
+
+
         '''
         print("trans")
         for step in range(20):
@@ -234,6 +262,10 @@ class AutoAgglomerative(pl.LightningModule):
         self.cd_list.append(shape_cd)
 
         self._save_inference_data(data_dict, np.stack(all_pred_trans_rots, axis=0), acc)
+
+
+
+        
 
 
     def test_step(self, data_dict, idx):
@@ -308,6 +340,7 @@ class AutoAgglomerative(pl.LightningModule):
                 noisy_trans_and_rots = self.noise_scheduler.step(pred_noise, t, noisy_trans_and_rots).prev_sample
                 noisy_trans_and_rots[ref_part] = reference_gt_and_rots[ref_part]  
                 all_pred_trans_rots.append(get_param(noisy_trans_and_rots[0], G.nodes).unsqueeze(0).cpu().numpy())
+
 
             if iter + 1 == self.cfg.verifier.max_iters:
                 break
@@ -507,6 +540,7 @@ class AutoAgglomerative(pl.LightningModule):
             mask = data_dict["part_valids"][i] == 1
             c_trans_rots = c_trans_rots[:, mask.cpu().numpy(), ...]
             np.save(os.path.join(save_dir, f"predict_{acc[i]}.npy"), c_trans_rots)
+            np.save(os.path.join(save_dir, f"predict_20parts_{acc[i]}.npy"), pred_trans_rots[:, i, ...])
             gt_transformation = torch.cat(
                 [data_dict["part_trans"][i],
                     data_dict["part_rots"][i]], dim=-1
@@ -517,6 +551,23 @@ class AutoAgglomerative(pl.LightningModule):
                 gt_transformation.cpu().numpy()
             )
 
+
+            gt_transformation_20parts = torch.cat(
+                [data_dict["part_trans"][i],
+                    data_dict["part_rots"][i]], dim=-1
+            )
+
+            np.save(os.path.join(
+                save_dir, "gt_20parts.npy"),
+                gt_transformation_20parts.cpu().numpy()
+            )
+
+
+
+            np.save(os.path.join(
+                save_dir, "part_scale.npy"),
+                data_dict['part_scale'][i].cpu().numpy()
+            )
             init_pose_r = data_dict["init_pose_r"][i]
             init_pose_t = data_dict["init_pose_t"][i]
             init_pose = torch.cat([init_pose_t, init_pose_r], dim=-1)
