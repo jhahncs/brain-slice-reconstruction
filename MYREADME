@@ -5,20 +5,26 @@ rm -rdf renderer/BlenderToolBox_render/
 source /data/jhahn/slice_env/bin/activate
 source /data/jhahn/render_env/bin/activate
 
-nohup python batch_slicer.py /data/jhahn/data/brain_lightsheet/stack.tif /data/jhahn/data/brain_lightsheet/my_brain &
+nohup python batch_slicer.py /data/jhahn/data/brain_lightsheet/stack.tif --output_dir=/data/jhahn/data/brain_lightsheet/slices &
+
+
+#DATASET_NAME=${DATASET_TYPE}
+DATASET_NAME=brain_lightsheet_2 
+#DATASET_TYPE=atlas_mouse_brain_50mm_mesh
+
+EXP_NAME=rot_y_un_e300
 
 
 #nohup python myslicer.py /data/jhahn/data/brain_lightsheet/stack.tif /data/jhahn/data/brain_lightsheet/my_brain &
 #nohup python myslicer.py /data/jhahn/data/brain_lightsheet/stack.tif /home/jhahn/puzzlefusion-plusplus/2d_2_pcd/slicer_my_brain &
 
-nohup python obj_2_pcd.py --obj_dir_root /data/jhahn/data/shape_dataset/data/brain_lightsheet --tiff_dir_root /data/jhahn/data/brain_lightsheet/slices  > nohup.out 2>&1 &
-python generate_dataset_split.py --dataname 0.005_LS --obj_dir /data/jhahn/data/shape_dataset/data/brain_lightsheet --datalist_file_dir /data/jhahn/data/shape_dataset/data
+nohup python obj_2_pcd.py --obj_dir_root /data/jhahn/data/shape_dataset/data/${DATASET_NAME} --tiff_dir_root /data/jhahn/data/brain_lightsheet/slices  > nohup.out 2>&1 &
 
-DATASET_NAME=ABA_10s_1000n_mesh
-DATASET_NAME=LS_10s_1000n
-#DATASET_TYPE=atlas_mouse_brain_50mm_mesh
-DATASET_TYPE=brain_lightsheet
-EXP_NAME=rot_y_un_e300
+
+
+python generate_dataset_split.py --dataname ${DATASET_NAME} --obj_dir ${OBJ_DIR_ROOT} --datalist_file_dir /data/jhahn/data/shape_dataset/data
+
+
 
 
 python generate_pc_data.py +data.save_pc_data_path=/data/jhahn/data/shape_dataset/pc_data/${DATASET_NAME} data.data_fn="$DATASET_NAME.\{\}.txt" \

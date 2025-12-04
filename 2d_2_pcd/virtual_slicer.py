@@ -98,10 +98,17 @@ def slice_matrix(V, normal, tolerance=0.5, debug=False, slice_gap=1):
 
     if debug: print('max_travel',max_travel)
     num_print = 0
+    iter_idx = 0
+    s = 0
+    #for _, num_of_images_in_slicing_gap in enumerate(num_of_images_in_slicing_gap_list):#
     for s in range(0,max_travel,slice_gap):
         
+        #if s >= max_travel:
+        #    break
+        #print(s, max_travel)
         # Calculate the center point for the current slice
         pt = array_center + normal * (s - max_travel / 2)
+        #s += num_of_images_in_slicing_gap
         #pt = array_center + normal * (s - max_travel / 2)
         # Check if the plane is reasonably within the volume bounds
         if not (0 <= pt[0] < original_shape[0] and
@@ -110,6 +117,7 @@ def slice_matrix(V, normal, tolerance=0.5, debug=False, slice_gap=1):
             if len(sliced_matrix_list) > 0:  # Stop if we have collected slices and moved out
                 break
             else:  # continue until we are in the volume
+                #print(pt, original_shape )
                 continue
 
         num_print += 1

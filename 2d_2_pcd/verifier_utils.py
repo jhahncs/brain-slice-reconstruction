@@ -129,6 +129,34 @@ def find_min_non_zero_distance_index(distances: torch.Tensor):
     return min_distance_values, min_indices
 
 
+def merge_two_pcd_by_2d(point_cloud_A, point_cloud_B, num_of_points = 1000):
+    # 2. 두 포인트 클라우드 결합 (Concatenation)
+    # np.vstack을 사용하여 두 배열을 수직으로 쌓아 올립니다.
+    combined_cloud = np.vstack((point_cloud_A, point_cloud_B))
+    if num_of_points < 0 :
+        return combined_cloud
+
+    #print(f"결합된 클라우드 모양: {combined_cloud.shape} (2000, 3)")
+
+    # ---
+
+    # 3. 다운샘플링 (Downsampling)을 통해 1000개 포인트 선택
+
+    # 총 포인트 수 (2000개)에서 1000개를 무작위로 선택하기 위한 인덱스 생성
+    total_points = combined_cloud.shape[0] # 2000
+    target_points = point_cloud_A.shape[0] 
+
+    # 0부터 total_points-1까지의 정수 중에서 target_points만큼 무작위로 선택합니다.
+    # replace=False는 중복 선택을 허용하지 않음을 의미합니다.
+    sampling_indices = np.random.choice(total_points, target_points, replace=False)
+
+    # 무작위로 선택된 인덱스를 사용하여 결합된 클라우드에서 포인트 추출
+    merged_cloud = combined_cloud[sampling_indices]
+
+    #print(f"최종 병합된 클라우드 모양: {merged_cloud.shape} (1000, 3)")
+    return merged_cloud
+
+
 def merge_two_pcd(point_cloud_A, point_cloud_B, num_of_points = 1000):
     # 2. 두 포인트 클라우드 결합 (Concatenation)
     # np.vstack을 사용하여 두 배열을 수직으로 쌓아 올립니다.

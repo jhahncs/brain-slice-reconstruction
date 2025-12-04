@@ -279,7 +279,7 @@ def save_numpy_array_as_tiffs(numpy_array, output_folder, filename_prefix=""):
 # ====================================================================
 from PIL import Image
 
-def _task(OUTPUT_DIR,vector, V = None, slice_gap=1):
+def _task(OUTPUT_DIR,vector, V = None, slice_gap=1, img_w = 500, img_h = 500):
     if V is None:
         global original_volume
         V = original_volume
@@ -294,7 +294,9 @@ def _task(OUTPUT_DIR,vector, V = None, slice_gap=1):
     print('vec_name',vec_name)
 
     
-    transformed_volume = slice_matrix(V, normal=vector, debug=False, slice_gap=slice_gap)
+    transformed_volume = slice_matrix(V, normal=vector,
+                                       debug=False, 
+                                       slice_gap=slice_gap)
     
     print(f"  Original shape: {V.shape} -> Transformed shape: {transformed_volume.shape}")
     
@@ -321,19 +323,33 @@ def _task(OUTPUT_DIR,vector, V = None, slice_gap=1):
         #output_filepath_o = input_filepath[:-3]+"png"
         img = Image.open(input_filepath)
         
-        cropped_img = img.crop( (bx - 20,by - 20,bx+bw + 20,by+bh + 20) )
+        cropped_img = img.crop( (bx - 20, by - 20, bx + bw + 20, by + bh + 20) )
         #cropped_img.save(output_filepath_c, format="PNG")
 
         #output_filepath_r = input_filepath[:-3]+"_r.png"
-        img_rescaled = cropped_img.resize((500, 500), Image.LANCZOS)
+        img_rescaled = cropped_img.resize((img_w, img_h), Image.LANCZOS)
         img_rescaled.save(input_filepath, format="TIFF")
 
         #img_rescaled.save(output_filepath_o, format="PNG")
         
 
     return num_of_slices, (bx,by,bw,bh)
+
+import argparse
 if __name__ == "__main__":
     
+    parser = argparse.ArgumentParser(description="Process image volumes with specified normal vectors.")
+
+    # 출력 디렉토리 파라미터 (필수)
+    parser.add_argument(
+        '--output_dir', 
+        type=Path, 
+        required=True, 
+        help='The main output directory path.'
+    )
+    args = parser.parse_args()
+    
+    OUTPUT_DIR = args.output_dir
 
     #print("original_volume",original_volume.shape)
     #print(np.max(np.max(original_volume[100,:,:],axis=1)))

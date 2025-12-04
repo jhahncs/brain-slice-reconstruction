@@ -132,13 +132,16 @@ def get_obj_from_testdataset(data_type,data_id,tiff_dir,tiff_dir_root,obj_dir_ro
     print(f"combining {len(obj_files)} files")
     slice_util.combine_obj_files(obj_files, render_output_dir+f"/gt_{data_id}.obj")
 
-def obj_2_pc(cfg,   obj_dir_root, pc_dir_root):
+def obj_2_pc(cfg,   obj_dir_root, pc_dir_root, tiff_dir):
         
     with open(obj_dir_root+"/test.txt",'w') as f:
         #f.write(obj_dir_list_relative[0])
         f.write("test\n")
 
-    
+    with open(obj_dir_root+"/tiff.txt",'w') as f:
+        #f.write(obj_dir_list_relative[0])
+        f.write(f"{tiff_dir}")
+
     
     data_dict = dict(
         data_dir=obj_dir_root,
@@ -270,7 +273,7 @@ def zip_and_download_folder(folder_path):
     print("위 링크를 클릭하여 다운로드하세요.")
     return zip_file_name
 
-def render(inference_dir_root, obj_id_list ,part_pcs_gt, original_vertices, part_valids, render_output_dir):
+def render(tiff_dir, inference_dir_root, obj_id_list ,part_pcs_gt, original_vertices,expanded_part_scale, part_valids, render_output_dir):
         
     result_dir_list = []
     for f in os.listdir(inference_dir_root):
@@ -282,10 +285,10 @@ def render(inference_dir_root, obj_id_list ,part_pcs_gt, original_vertices, part
     _result_dir = result_dir_list[0]
 
     
-    render_inference_result.gt_img(device, part_pcs_gt,original_vertices,part_valids, _result_dir, render_output_dir, obj_id_list)
+    #render_inference_result.gt_img(device,tiff_dir, part_pcs_gt,original_vertices,part_valids, expanded_part_scale, _result_dir, render_output_dir, obj_id_list)
 
-    render_inference_result.make_video(device, part_pcs_gt,original_vertices, part_valids, _result_dir,render_output_dir , obj_id_list)
-
+    last_step_idx = render_inference_result.make_video2(device,tiff_dir, part_pcs_gt,original_vertices, part_valids, expanded_part_scale, _result_dir,render_output_dir , obj_id_list)
+    return last_step_idx
 from chamferdist import ChamferDistance
 
 def eval(vertices_gt,inference_dir_root, render_output_dir):
