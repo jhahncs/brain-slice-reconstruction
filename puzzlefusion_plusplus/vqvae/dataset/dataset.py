@@ -73,30 +73,30 @@ class GeometryPartDataset(Dataset):
             if not os.path.isdir(mesh_dir):
                 print(f'{mesh} does not exist')
                 continue
-            fracs = os.listdir(mesh_dir)
-            fracs.sort()
+            #fracs = os.listdir(mesh_dir)
+            #fracs.sort()
             
-            for frac in fracs:
-                # we take both fractures and modes for training
-                #print('frac',fracs)
-                if 'fractured' not in frac and 'mode' not in frac:
-                    continue
-                #print('frac',frac)
-                frac = os.path.join(mesh, frac)
-                _files = os.listdir(os.path.join(self.data_dir, frac))
-                #_files = [f for f in _files if f.endswith(".obj") and f.startswith('piece_flat_')]
-                _files = [f for f in _files if f.endswith(f".{self.file_ext}")]
-                _files.sort(key = lambda k: int(k.replace(f'.{self.file_ext}',"")))
+            #for frac in fracs:
+            # we take both fractures and modes for training
+            #print('frac',fracs)
+            #if 'fractured' not in frac and 'mode' not in frac:
+            #    continue
+            #print('frac',frac)
+            frac = os.path.join(mesh, mesh_dir)
+            _files = os.listdir(os.path.join(self.data_dir, frac))
+            #_files = [f for f in _files if f.endswith(".obj") and f.startswith('piece_flat_')]
+            _files = [f for f in _files if f.endswith(f".{self.file_ext}")]
+            _files.sort(key = lambda k: int(k.replace(f'.{self.file_ext}',"")))
 
+            num_parts = len(_files)
+            if num_parts > self.max_num_part:
+                _files = _files[:20]
                 num_parts = len(_files)
-                if num_parts > self.max_num_part:
-                    _files = _files[:20]
-                    num_parts = len(_files)
 
-                #print('folder:',frac, ' num_parts:',num_parts)
-                #print(_files)
-                if self.min_num_part <= num_parts <= self.max_num_part:
-                    data_list.append(frac)
+            #print('folder:',frac, ' num_parts:',num_parts)
+            #print(_files)
+            if self.min_num_part <= num_parts <= self.max_num_part:
+                data_list.append(frac)
         #print('data_list',len(data_list))
         return data_list
     

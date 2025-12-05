@@ -238,7 +238,7 @@ class Denoiser(pl.LightningModule):
         }
 
 
-        
+        '''
         for b in range(output_dict['pred_noise'].shape[0]):
             _di = {}
             for p in [2]:
@@ -283,7 +283,7 @@ class Denoiser(pl.LightningModule):
             self.log_dict( _di, on_step=True, on_epoch=False)
             if True:
                 break
-
+        '''
         
 
         return output_dict

@@ -1,19 +1,19 @@
 DATASET_NAME=ABA_10s_1000n_mesh
-DATASET_NAME=LS_10s_1000n
+DATASET_NAME=brain_lightsheet_2
 #DATASET_TYPE=atlas_mouse_brain_50mm_mesh
-DATASET_TYPE=brain_lightsheet
-EXP_NAME=rot_y_un_e300
+EXP_NAME=rot_y_un_e1000
 #cd /home/jhahn/puzzlefusion-plusplus/2d_2_pcd
 #python obj_2_pcd.py --obj_dir_root /data/jhahn/data/shape_dataset/data/brain_lightsheet --tiff_dir_root /data/jhahn/data/brain_lightsheet/slices 
 #cd /home/jhahn/puzzlefusion-plusplus
-#python generate_dataset_split.py --dataname ${DATASET_NAME} --obj_dir /data/jhahn/data/shape_dataset/data/${DATASET_TYPE} --datalist_file_dir /data/jhahn/data/shape_dataset/data
+#python generate_dataset_split.py --dataname ${DATASET_NAME} --obj_dir /data/jhahn/data/shape_dataset/data/${DATASET_NAME} --datalist_file_dir /data/jhahn/data/shape_dataset/data
 
 
-python generate_pc_data.py +data.save_pc_data_path=/data/jhahn/data/shape_dataset/pc_data/${DATASET_NAME} data.data_fn="$DATASET_NAME.\{\}.txt" \
-    data.data_dir=/data/jhahn/data/shape_dataset/pc_data/${DATASET_NAME}/train/ \
-    data.data_val_dir=/data/jhahn/data/shape_dataset/pc_data/${DATASET_NAME}/val/ \
-    data.mesh_data_dir=/data/jhahn/data/shape_dataset/data \
-    +data.file_ext=obj
+#python generate_pc_data.py +data.save_pc_data_path=/data/jhahn/data/shape_dataset/pc_data/${DATASET_NAME} \
+#    data.data_fn="$DATASET_NAME.\{\}.txt" \
+#    data.data_dir=/data/jhahn/data/shape_dataset/pc_data/${DATASET_NAME}/train/ \
+#    data.data_val_dir=/data/jhahn/data/shape_dataset/pc_data/${DATASET_NAME}/val/ \
+#    data.mesh_data_dir=/data/jhahn/data/shape_dataset/data \
+#    +data.file_ext=glb
 
 #ddp_find_unused_parameters_true
 

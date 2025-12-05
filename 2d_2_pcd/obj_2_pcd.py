@@ -1,6 +1,7 @@
 import warnings
 # 반드시 numpy나 torch를 import하기 '전'에 작성해야 합니다.
 warnings.filterwarnings("ignore", message=".*smallest subnormal.*")
+import torch.multiprocessing as mp
 
 import cv2
 import matplotlib.pyplot as plt
@@ -17,6 +18,13 @@ import trimesh
 import time
 from tqdm import tqdm # 1. tqdm 라이브러리를 임포트합니다.
 import open3d as o3d
+
+if torch.cuda.is_available():
+    device = torch.device("cuda:0")
+    torch.cuda.set_device(device)
+else:
+    device = torch.device("cpu")
+
 def pcd_2_mesh(pdc_filename, mesh_filename):
     mesh = Mesh(pdc_filename)
     pts0 = Points(mesh, r=3)#.add_gaussian_noise(1)
@@ -316,7 +324,7 @@ def tiff_list_2_pcd(_cur_y, tiff_filename_list,
                          max_num_of_points_for_a_pcd  = 5000,
                          device=None, DEBUG=False):
 
-    warnings.filterwarnings("ignore", message=".*smallest subnormal.*", category=UserWarning)
+    #warnings.filterwarnings("ignore", message=".*smallest subnormal.*", category=UserWarning)
 
     
     slice_filename_arr = tiff_filename_list[0].split("/")
@@ -381,12 +389,6 @@ def tiff_list_2_pcd(_cur_y, tiff_filename_list,
     # --- 사용 예시 ---
 
 
-    xyz_list[:, 0] = 1.0 - xyz_list[:, 0]
-    xyz_list[:, 2] = 1.0 - xyz_list[:, 2]
-
-    # 3. Z 좌표 스케일링 (xyz[2] *= (h/w))
-    # 모든 행의 2번(z) 컬럼에 대해 곱셈 수행
-    xyz_list[:, 2] *= (h / w)
 
     # --- 랜덤 샘플링 ---
 
@@ -403,6 +405,13 @@ def tiff_list_2_pcd(_cur_y, tiff_filename_list,
         # 인덱싱을 통해 데이터 추출 (Slicing)
         xyz_list = xyz_list[sampled_indices]
 
+    xyz_list[:, 0] = 1.0 - xyz_list[:, 0]
+    xyz_list[:, 2] = 1.0 - xyz_list[:, 2]
+
+    # 3. Z 좌표 스케일링 (xyz[2] *= (h/w))
+    # 모든 행의 2번(z) 컬럼에 대해 곱셈 수행
+    xyz_list[:, 2] *= (h / w)
+
     '''
     for xyz in xyz_list:
         xyz[0] = 1.0 - xyz[0] 
@@ -418,7 +427,7 @@ def tiff_list_2_pcd(_cur_y, tiff_filename_list,
     #print(f'{tickness},{np.min(xyz_list, axis=0)[1]:.3f},{np.max(xyz_list, axis=0)[1]:.3f}')
     #if DEBUG: print("inter",f'{np.min(_xyz_list, axis=0)},{np.max(_xyz_list, axis=0)}')
     '''
-    xyz_list = xyz_list.cpu().numpy()
+    xyz_list = xyz_list.detach().cpu().numpy()
 
     if file_ext == 'glb':
         point_cloud = trimesh.PointCloud(vertices=xyz_list)
@@ -584,12 +593,12 @@ def tiff_2_obj_parallel_test_mode(tiff_dir_root, slice_angle, tickness:float,
 import warnings
 def tiff_lilst_2_brain_obj(image_filename_list_sub,  tickness:float, 
                         num_of_missing_slices_list = 5, obj_slicing_dir = ""  
-                        , num_of_slices = 19, is_curvature = True, file_ext = 'obj', device = None):
+                        , num_of_slices = 19, is_curvature = True, file_ext = 'obj'):
     
     
     
     # 정규표현식으로 해당 메시지를 포함하는 모든 UserWarning 무시
-    warnings.filterwarnings("ignore", message=".*smallest subnormal.*", category=UserWarning)
+    #warnings.filterwarnings("ignore", message=".*smallest subnormal.*", category=UserWarning)
 
     obj_dir_list = []
     
@@ -788,7 +797,7 @@ def gen_num_of_missing_slices(mode, from_index, to_index, _num_of_slices):
     elif mode == 'Gaussian':
 
         mu = _num_of_missing_slices
-        var = 1
+        var = 100
         n_samples = _num_of_slices
         limit_m = int((to_index - from_index)/ 1)  # 평균인 10보다 작은 수만 추출
         _tries = 0
@@ -852,7 +861,7 @@ def create_dataset(dataset_annotation_file_name, tiff_dir_root, obj_dir_root ):
     #if DEBUG_MODE: data_ids = data_ids[:1]
 
 
-    tickness_of_a_slice_list = [0.002]
+    tickness_of_a_slice_list = [0.003]
     is_curvature_list = [False,True]
     num_of_missing_slices_dist_list = ['Uniform','Gaussian']
     #num_of_missing_slices_dist_list = ['Uniform']
@@ -930,6 +939,9 @@ def create_dataset(dataset_annotation_file_name, tiff_dir_root, obj_dir_root ):
                         #adjusted_to_index = from_index + (num_of_missing_slices + 2) * (_num_of_slices -1) + (num_of_missing_slices+1)
 
                         image_filename_list_for_one_sub_brain = image_filename_list[from_index  : adjusted_to_index + 1]
+                        if len(image_filename_list_for_one_sub_brain) <= 0:
+                            #print("Empty",slice_angle, from_index, to_index, adjusted_to_index, _num_of_slices)
+                            continue
                         #image_filename_list_for_one_sub_brain = pad_list_to_20(image_filename_list_for_one_sub_brain, '')
                         for is_curvature in is_curvature_list:
                             for tickness in tickness_of_a_slice_list:
@@ -944,18 +956,54 @@ def create_dataset(dataset_annotation_file_name, tiff_dir_root, obj_dir_root ):
                                 sliced_volumn_dataset['to_index'] = adjusted_to_index + 1
                                 sliced_volumn_dataset['num_of_missing_slices_dist'] = num_of_missing_slices_dist
                                 _num_of_missing_slices_list_str = [str(item) for item in _num_of_missing_slices_list]
-                                sliced_volumn_dataset['_num_of_missing_slices_list'] = ','.join(_num_of_missing_slices_list_str)
+                                sliced_volumn_dataset['num_of_missing_slices_list'] = ','.join(_num_of_missing_slices_list_str)
                                 sliced_volumn_dataset['is_curvature'] = is_curvature
                                 sliced_volumn_dataset['num_of_slices'] = _num_of_slices
-
-                                if _num_of_slices > 10 and from_index == _from_index and adjusted_to_index > _to_index - 50:
-                                    sliced_volumn_dataset_list.append(sliced_volumn_dataset)
+                                sliced_volumn_dataset_list.append(sliced_volumn_dataset)
+                                #if _num_of_slices <= 4 and from_index == _from_index and adjusted_to_index > _to_index - 50:
+                                #    sliced_volumn_dataset_list.append(sliced_volumn_dataset)
 
                                 #obj_2_pcd.tiff_2_obj_parallel(**sliced_volumn_dataset)
+                                '''
+                                print(sliced_volumn_dataset['image_filename_list_for_one_sub_brain'])
+                                if len(sliced_volumn_dataset_list) > 3:
+                                    keys_list = [
+                                    'obj_dir_root',
+                                    'image_filename_list_for_one_sub_brain',
+                                    'slice_angle',
+                                    'tickness',
+                                    'from_index',
+                                    'to_index',
+                                    'num_of_missing_slices_dist',
+                                    'num_of_missing_slices_list',
+                                    'is_curvature',
+                                    'num_of_slices'
+                                    ]
+                                    
+                                    _df = pd.DataFrame(sliced_volumn_dataset_list)
+                                    _df.columns = keys_list
+                                    _df.to_csv(dataset_annotation_file_name, index=None)
+
+                                    return _df
+                                '''
 
     #if len(sliced_volumn_dataset_list) >= 100:
+    keys_list = [
+    'obj_dir_root',
+    'image_filename_list_for_one_sub_brain',
+    'slice_angle',
+    'tickness',
+    'from_index',
+    'to_index',
+    'num_of_missing_slices_dist',
+    'num_of_missing_slices_list',
+    'is_curvature',
+    'num_of_slices'
+    ]
+    
     _df = pd.DataFrame(sliced_volumn_dataset_list)
-    _df.to_csv(dataset_annotation_file_name)
+    _df.columns = keys_list
+    _df.to_csv(dataset_annotation_file_name, index=None)
 
     return _df
 
@@ -964,7 +1012,6 @@ if __name__ == "__main__":
 
 
 
-    from torch.utils.data import DataLoader
 
     parser = argparse.ArgumentParser(
         description="convert tiff to obj/glb",
@@ -1000,8 +1047,8 @@ if __name__ == "__main__":
     for batch_idx, (tiff_images, labels, output_dir) in enumerate(data_loader):
         
 
-        if batch_idx > 10:
-            break
+        #if batch_idx > 10:
+        #    break
 
         missing_slices_list = [t.item() for t in labels['missing_slices_list']]
         _tiff_images = [t[0] for t in tiff_images]
@@ -1011,10 +1058,10 @@ if __name__ == "__main__":
             continue
         #print((_tiff_images, labels['tickness'],missing_slices_list, _output_dir, labels['num_of_slices'].item(), labels['is_curvature'].item(),'glb', device))
         tasks_to_run.append((_tiff_images, labels['tickness'].item()
-                ,missing_slices_list, _output_dir, labels['num_of_slices'].item(), labels['is_curvature'].item(),'glb', device))
+                ,missing_slices_list, _output_dir, labels['num_of_slices'].item(), labels['is_curvature'].item(),'glb'))
         
 
-    multiprocessing.set_start_method('spawn', force=True)
-    with multiprocessing.Pool( ) as pool: # Use a pool of 4 processes
+    mp.set_start_method('spawn', force=True)
+    with mp.Pool( ) as pool: # Use a pool of 4 processes
         pool.starmap(tiff_lilst_2_brain_obj, tqdm(tasks_to_run, total=len(tasks_to_run), desc="_tiff_2_pcd_func"))
     print("DONE!")

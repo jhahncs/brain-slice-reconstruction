@@ -8,7 +8,7 @@ from exp_util import ExpInfo
 
 if __name__ == "__main__":
 
-    '''
+    
 
     parser = argparse.ArgumentParser(
         description="convert tiff to obj",
@@ -22,35 +22,19 @@ if __name__ == "__main__":
     parser.add_argument("--datalist_file_dir",required=False, default='/data/jhahn/data/shape_dataset/data')
     parser.add_argument("--dataname",required=True)
 
-
+    #parser.add_argument("--tiff_dir_root",required=True, help="Path to the input TIFF file.")
     args = parser.parse_args()
+
+
     dataname = args.dataname
-    #dataname = '0.001_10_HIP_CUR'
     datalist_file_dir = args.datalist_file_dir
-    dir = args.obj_dir  
-    '''
-    date_type = 'atlas_mouse_brain_50mm_mesh'
-    date_type = 'brain_lightsheet'
+    obj_dir = args.obj_dir  
+
     
-    dataname = 'LS_10s_1000n'
-    dir = f'/data/jhahn/data/shape_dataset/data/{date_type}'
-    datalist_file_dir = '/data/jhahn/data/shape_dataset/data'
+    print(dataname, obj_dir, datalist_file_dir)
 
 
-    slice_angle_to_range_map = {}
-
-
-    slice_angle_to_range_map['sliced_on_1_0_0'] = (0,366)
-    slice_angle_to_range_map['sliced_on_1_0_1'] = (0,490)
-    slice_angle_to_range_map['sliced_on_0_0_1'] = (61,398)
-    slice_angle_to_range_map['sliced_on_1.0_1.0_0.0'] = (5,608)
-    slice_angle_to_range_map['sliced_on_0_1_1'] = (6,569)
-    slice_angle_to_range_map['sliced_on_0_1_0'] = (5,797)
-    slice_angle_to_range_map['sliced_on_1_1_0'] = (5,608)
-    slice_angle_to_range_map['sliced_on_1_1_1'] = (0,640)
-
-
-    _dir_list = os.listdir(dir)
+    _dir_list = os.listdir(obj_dir)
     _dir_list_filtered = []
 
     tickness = '0.005'
@@ -66,16 +50,10 @@ if __name__ == "__main__":
     num_of_missing_slices = str(dataname.split("_")[3])
     '''
     for _dir in _dir_list:
-        if not os.path.isdir(dir+"/"+_dir):
+        if not os.path.isdir(obj_dir+"/"+_dir):
             continue
 
-        exp_info = ExpInfo(_dir)
-        if exp_info.cut_y == 1 and exp_info.cut_y == 1 and exp_info.cut_y == 0:
-            slice_dirname = f'sliced_on_1.0_1.0_0.0'
-        else:
-            slice_dirname = f'sliced_on_{int(exp_info.cut_x)}_{int(exp_info.cut_y)}_{int(exp_info.cut_z)}'
-        if  exp_info.num_of_slices > 3:
-            _dir_list_filtered.append(_dir)
+        _dir_list_filtered.append(_dir)
             #print(slice_dirname, exp_info.num_of_slices)
         
         #if exp_info.start_data_id == slice_angle_to_range_map[slice_dirname][0] and exp_info.end_data_id == slice_angle_to_range_map[slice_dirname][1]-1:
@@ -119,7 +97,7 @@ if __name__ == "__main__":
         with open(output_file_name,"w") as output_file:
                     
             for f in sorted(data):
-                output_file.write(f'{date_type}/{f}\n')
+                output_file.write(f'{dataname}/{f}\n')
                 #output_file.write(f'brain_lightsheet/{f}\n')
     
     

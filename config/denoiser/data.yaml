@@ -4,9 +4,9 @@ data:
   num_workers: 64 #10
 
 
-  data_fn: "brain_lightsheet.{}.txt"
-  data_dir: /data/jhahn/data/shape_dataset/pc_data/brain_lightsheet/train/
-  data_val_dir: /data/jhahn/data/shape_dataset/pc_data/brain_lightsheet/val/
+  data_fn: "brain_lightsheet_2.{}.txt"
+  data_dir: /data/jhahn/data/shape_dataset/pc_data/brain_lightsheet_2/train/
+  data_val_dir: /data/jhahn/data/shape_dataset/pc_data/brain_lightsheet_2/val/
   mesh_data_dir: /data/jhahn/data/shape_dataset/data
   
 

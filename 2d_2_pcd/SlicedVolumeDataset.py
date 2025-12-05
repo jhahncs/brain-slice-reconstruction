@@ -67,7 +67,7 @@ class SlicedVolumeDataset(Dataset):
         
         # _num_of_missing_slices_list 파싱 (문자열 -> 정수 리스트)
         # 이전 질문의 TypeError 방지를 위해 문자열로 변환 후 분리하고 정수화합니다.
-        missing_slices_str = str(row['_num_of_missing_slices_list'])
+        missing_slices_str = str(row['num_of_missing_slices_list'])
         missing_slices_list = [int(n.strip()) for n in missing_slices_str.split(',')]
         
         # 다른 메타데이터는 그대로 반환
