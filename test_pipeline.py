@@ -117,14 +117,14 @@ import trimesh
 def get_obj_from_testdataset(data_type,data_id,tiff_dir,tiff_dir_root,obj_dir_root,render_output_dir):
     # get from test data
     obj_files = []
-    glb_dir = f'/data/jhahn/data/shape_dataset/data/{data_type}/{data_id}/fractured_0'
-    os.makedirs(f'{obj_dir_root}/test/fractured', exist_ok=True)
+    glb_dir = f'/data/jhahn/data/shape_dataset/data/{data_type}/{data_id}'
+    os.makedirs(f'{obj_dir_root}/test', exist_ok=True)
     print(glb_dir)
     for f in os.listdir(glb_dir):
         _id = int(f.split(".")[-2])
         #shutil.copyfile(f'{tiff_dir}/{_id}.tif', f'{tiff_dir_root}/{_id}.tif')    
-        shutil.copyfile(f'{glb_dir}/{f}', f'{obj_dir_root}/test/fractured/{f}')
-        _glb = trimesh.load(f'{obj_dir_root}/test/fractured/{f}')
+        shutil.copyfile(f'{glb_dir}/{f}', f'{obj_dir_root}/test/{f}')
+        _glb = trimesh.load(f'{obj_dir_root}/test/{f}')
         _new_obj_filename = render_output_dir+"/objs/"+f.replace(".glb",".obj")
         _glb.export(_new_obj_filename)
         
@@ -170,7 +170,7 @@ def obj_2_pc(cfg,   obj_dir_root, pc_dir_root, tiff_dir):
         drop_last=False,
         persistent_workers=(cfg.data.num_workers > 0),
     )
-
+    print('test_pipeline/obj_2_pc data loaded: ',len(test_loader))
 
     cfg.data.batch_size = 1
     cfg.data.val_batch_size = 1
@@ -183,7 +183,7 @@ def obj_2_pc(cfg,   obj_dir_root, pc_dir_root, tiff_dir):
     #return obj_dir_list_relative
 
 
-def inference(cfg, pc_dir_root, ckpt_path, inference_dir_root):       
+def inference(cfg, pc_dir_root, ckpt_path, inference_dir_root, disassemble_mode = 'center', disassemble_jitter_ratio = 0.01):       
     
 
     with open_dict(cfg):
@@ -193,6 +193,9 @@ def inference(cfg, pc_dir_root, ckpt_path, inference_dir_root):
         #cfg.denoiser.ckpt_path= data_home_dir+f'output/denoiser/everyday_epoch100_bs64/training/last.ckpt'
         cfg.denoiser.ckpt_path= ckpt_path
         cfg.inference_dir= inference_dir_root
+        cfg.denoiser.disassemble_mode = disassemble_mode
+        cfg.denoiser.disassemble_jitter_ratio = disassemble_jitter_ratio
+        
         cfg.denoiser.data.val_batch_size=1
         cfg.verifier.max_iters = 1
         #cfg.experiment_output_path = project_root
@@ -207,7 +210,7 @@ def inference(cfg, pc_dir_root, ckpt_path, inference_dir_root):
     #print(cfg.experiment_output_path)
     # initialize data
     test_loader = build_test_dataloader(cfg.denoiser, denoiser_only_flag)
-
+    print(f"DataLoader 생성 완료. 총 배치 개수: {len(test_loader)}")
     # load denoiser weights
     model = AutoAgglomerative(cfg)
     
@@ -273,7 +276,8 @@ def zip_and_download_folder(folder_path):
     print("위 링크를 클릭하여 다운로드하세요.")
     return zip_file_name
 
-def render(tiff_dir, inference_dir_root, obj_id_list ,part_pcs_gt, original_vertices,expanded_part_scale, part_valids, render_output_dir):
+def render(tiff_dir, inference_dir_root, obj_id_list ,part_pcs_gt, 
+           original_vertices,expanded_part_scale, part_valids, render_output_dir):
         
     result_dir_list = []
     for f in os.listdir(inference_dir_root):
@@ -287,7 +291,9 @@ def render(tiff_dir, inference_dir_root, obj_id_list ,part_pcs_gt, original_vert
     
     #render_inference_result.gt_img(device,tiff_dir, part_pcs_gt,original_vertices,part_valids, expanded_part_scale, _result_dir, render_output_dir, obj_id_list)
 
-    last_step_idx = render_inference_result.make_video2(device,tiff_dir, part_pcs_gt,original_vertices, part_valids, expanded_part_scale, _result_dir,render_output_dir , obj_id_list)
+    last_step_idx = render_inference_result.make_video2(device,tiff_dir, part_pcs_gt,original_vertices,
+                                                         part_valids, expanded_part_scale, _result_dir,
+                                                         render_output_dir , obj_id_list)
     return last_step_idx
 from chamferdist import ChamferDistance
 

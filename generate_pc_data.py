@@ -8,12 +8,20 @@ import os
 import numpy as np
 from tqdm import tqdm
 #hydra.job.chdir=True
+from omegaconf import OmegaConf,open_dict
 
 @hydra.main(config_path='config/ae', config_name='global_config.yaml', version_base=None)
 def main(cfg):
     cfg.data.batch_size = 1
     cfg.data.val_batch_size = 1
-    cfg.data.num_workers: 64 
+    cfg.data.num_workers: 64     
+
+
+    with open_dict(cfg):
+        cfg.disassemble_mode = 'jitter'
+        cfg.disassemble_jitter_ratio = 0.01
+
+
     train_loader, val_loader, test_loader = build_geometry_dataloader(cfg)
     
     def save_data(loader, data_type):

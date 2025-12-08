@@ -159,7 +159,8 @@ def get_vertices(inference_result_dir, objs_dir, device = None, max_points = 100
     
     with open(f'{inference_result_dir}/0/mesh_file_path.txt') as f:
         _mesh_file_dir = f.read()
-    mesh_file_dir = objs_dir+"/"+_mesh_file_dir
+    #mesh_file_dir = objs_dir+"/"+_mesh_file_dir
+    mesh_file_dir = _mesh_file_dir
 
 
     obj_file_list = slice_util.obj_files(mesh_file_dir)
@@ -179,9 +180,10 @@ def get_vertices(inference_result_dir, objs_dir, device = None, max_points = 100
             _glb = trimesh.load(pcd_file_name)
             all_vertices = [geom.vertices for geom in _glb.geometry.values()]
             combined_vertices = np.vstack(all_vertices)
-            vertices = torch.tensor(combined_vertices, dtype=torch.float32, device=device)
-
-            #vertices = trimesh.PointCloud(vertices=combined_vertices)
+            #vertices = torch.tensor(combined_vertices, dtype=torch.float32, device=device)
+            vertices = trimesh.PointCloud(vertices=combined_vertices).vertices
+            vertices = torch.from_numpy(vertices).float().to(device)
+                #vertices = trimesh.PointCloud(vertices=combined_vertices)
         else:
             vertices = pytorch3d.io.load_obj(pcd_file_name, device=device)[0]
         N, dim = vertices.shape
@@ -207,7 +209,7 @@ def get_vertices(inference_result_dir, objs_dir, device = None, max_points = 100
 
     obj_id_list = [o.split("/")[-1].split(".")[0] for o in obj_file_list]
     return vertice_list, obj_id_list
-
+'''
 def sum_arrays(total, zero_value ):
 
     summed_array = copy.deepcopy(total[0])
@@ -223,6 +225,43 @@ def sum_arrays(total, zero_value ):
         summed_array = np.where(zero_mask, arr, summed_array)
 
     return summed_array
+'''
+
+def sum_arrays(total, zero_value, device='cuda'):
+    """
+    Args:
+        total: numpy array 리스트 혹은 tensor 리스트
+        zero_value: 빈 값으로 간주할 값 (예: 0)
+        device: 'cuda' (GPU) 또는 'cpu'
+    """
+    if not total:
+        return None
+
+    # 첫 번째 배열을 GPU 텐서로 변환 및 복사
+    # (이미 텐서라면 clone, numpy라면 변환됨)
+    summed_array = torch.as_tensor(total[0], device=device).clone()
+
+    if len(total) == 1:
+        return summed_array
+
+    # 루프 수행
+    for arr in total[1:]:
+        # 현재 배열을 GPU로 이동
+        curr_arr = torch.as_tensor(arr, device=device)
+        
+        # 최적화: np.ones를 만들 필요 없이 바로 조건 비교
+        # 현재 누적된 결과가 zero_value인 곳(빈 곳)을 찾음
+        is_empty_mask = (summed_array == zero_value)
+        
+        # 빈 곳(is_empty_mask가 True)이면 curr_arr 값을 넣고, 아니면 기존 summed_array 유지
+        summed_array = torch.where(is_empty_mask, curr_arr, summed_array)
+
+    return summed_array
+
+# 사용 예시
+# result = sum_arrays_gpu(image_list, 0)
+# result_numpy = result.cpu().numpy() # 다시 numpy로 필요할 경우
+
 '''
 def _transform_pc(translated_points, trans, rotate, device):
     tr = Translate(torch.FloatTensor([trans]), dtype=torch.float32, device=device)
@@ -293,11 +332,7 @@ def _recenter_centroid(pc, centroid, inverted=False):
         return pc
 
 
-def _recenter_pc( pc, centroid):
-    """pc: [N, 3]"""
-    #centroid = np.mean(pc, axis=0)
-    pc = pc - centroid[None]
-    return pc
+
 
 def _rotate_pc_xyz( pc, quat_gt, inverted = False):
     """
@@ -1390,7 +1425,7 @@ def make_video2(device, tiff_dir, part_pcs_gt, original_vertices, part_valids,
 
     data_id = inference_result_dir.split("/")[-1]
     os.makedirs(f'{output_dir}/{data_id}',exist_ok=True)
-    os.makedirs(f'{output_dir}/0/steps',exist_ok=True)
+    os.makedirs(f'{output_dir}/{data_id}/steps',exist_ok=True)
 
 
     gt = np.load(f'{inference_result_dir}/gt.npy')
@@ -1457,7 +1492,7 @@ def make_video2(device, tiff_dir, part_pcs_gt, original_vertices, part_valids,
         for mode in modes:
             pcd = pytorch3d.structures.Pointclouds(points=[pcd_points[mode]], features=[colors.to(torch.float)])
             for view_name, renderer in renderers.items():
-                rendered_img = (renderer(pcd)[0].cpu().numpy() * 255).astype(np.uint8)
+                rendered_img = (renderer(pcd)[0] * 255).clamp(0, 255).to(torch.uint8)
                 buffer[mode][view_name].append(rendered_img)
 
 
@@ -1471,8 +1506,8 @@ def make_video2(device, tiff_dir, part_pcs_gt, original_vertices, part_valids,
         for view_name, axis_data in axis_map.items():
             buffer[mode][view_name].extend(axis_data)
             file_name = f'{output_dir}/{data_id}/{mode}{view_name}.png'
-            image_data = sum_arrays(buffer[mode][view_name], 0)
-            imageio.mimsave(file_name, [image_data], format='PNG')
+            image_data = sum_arrays(buffer[mode][view_name], buffer[mode][view_name][0][0][0][0],device)
+            imageio.mimsave(file_name, [image_data.cpu().numpy()], format='PNG')
 
 
 
@@ -1500,8 +1535,8 @@ def make_video2(device, tiff_dir, part_pcs_gt, original_vertices, part_valids,
             colors = torch.ones_like(translated_points) * torch.tensor(tab10_r.colors[(_part_idx)%len(tab10_r.colors)][:3]).to(device)  # blue points
             for view_name, renderer in renderers.items():
                 pts_pred, _ = transform_pc(device, translated_points, init_pose, gt, predict_0, _step, _part_idx)
-                pcd = pytorch3d.structures.Pointclouds(points=[pts_pred], features=[colors.to(torch.float)])
-                rendered_img = (renderer(pcd)[0].cpu().numpy() * 255).astype(np.uint8)
+                pcd = pytorch3d.structures.Pointclouds(points=[pts_pred], features=[colors.to(torch.float)])                
+                rendered_img = (renderer(pcd)[0] * 255).clamp(0, 255).to(torch.uint8)
                 buffer[view_name].append(rendered_img)
 
             
@@ -1524,15 +1559,15 @@ def make_video2(device, tiff_dir, part_pcs_gt, original_vertices, part_valids,
 
 
 
-        all_slices_into_grid_layout(mask_2d_list, f'{output_dir}/0/steps/{_step}_mask.png'
+        all_slices_into_grid_layout(mask_2d_list, f'{output_dir}/{data_id}/steps/{_step}_mask.png'
                                         , True, f'Step {_step} : Denoising')
 
 
         for view_name, axis_data in axis_map.items():
             buffer[view_name].extend(axis_data)
             file_name = f'{output_dir}/0/steps/{_step}{view_name}.png'
-            image_data = sum_arrays(buffer[view_name], 0)
-            imageio.mimsave(file_name, [image_data], format='PNG')
+            image_data = sum_arrays(buffer[view_name], buffer[view_name][0][0][0][0],device)
+            imageio.mimsave(file_name, [image_data.cpu().numpy()], format='PNG')
 
     _denoised_part_seq = 1
 
@@ -1562,7 +1597,7 @@ def make_video2(device, tiff_dir, part_pcs_gt, original_vertices, part_valids,
         adjusted_img_pre = None
 
         _denoised_part_seq_start = len(original_vertices) - 1
-        _denoised_part_seq_end = 5
+        _denoised_part_seq_end = int(len(original_vertices)/2)
 
 
 
@@ -1620,7 +1655,7 @@ def make_video2(device, tiff_dir, part_pcs_gt, original_vertices, part_valids,
         if _denoised_part_seq_start > _denoised_part_seq_end:
             mask_2d_list.reverse()
 
-        iou_mean = all_slices_into_grid_layout(mask_2d_list, f'{output_dir}/0/steps/{_step_temp}_mask.png'
+        iou_mean = all_slices_into_grid_layout(mask_2d_list, f'{output_dir}/{data_id}/steps/{_step_temp}_mask.png'
                                         , True, f'Step {_step_temp} : Adjusting')
 
         
@@ -1641,13 +1676,13 @@ def make_video2(device, tiff_dir, part_pcs_gt, original_vertices, part_valids,
 
     iter_list = list(axis_map.items()) + [('_mask', None)]
     for view_name, axis_data in tqdm(iter_list , desc='gen videos'):
-        w = iio.get_writer(f'{output_dir}/0/video{view_name}.mp4', format='FFMPEG', mode='I', fps=1,
+        w = iio.get_writer(f'{output_dir}/{data_id}/video{view_name}.mp4', format='FFMPEG', mode='I', fps=1,
                             #codec='h264_vaapi',
                             pixelformat='yuv420p')
         
         for _step_temp in range(-1, max_step ):
             try:
-                _img = iio.imread(f'{output_dir}/0/steps/{_step_temp}{view_name}.png')
+                _img = iio.imread(f'{output_dir}/{data_id}/steps/{_step_temp}{view_name}.png')
             except:
                 continue
             w.append_data(_img)

@@ -2,7 +2,7 @@ import warnings
 # 반드시 numpy나 torch를 import하기 '전'에 작성해야 합니다.
 warnings.filterwarnings("ignore", message=".*smallest subnormal.*")
 import torch.multiprocessing as mp
-
+import shutil
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
@@ -404,8 +404,12 @@ def tiff_list_2_pcd(_cur_y, tiff_filename_list,
         
         # 인덱싱을 통해 데이터 추출 (Slicing)
         xyz_list = xyz_list[sampled_indices]
-
-    xyz_list[:, 0] = 1.0 - xyz_list[:, 0]
+    try:
+        xyz_list[:, 0] = 1.0 - xyz_list[:, 0]
+    except:
+        print(_cur_y, tiff_filename_list, output_dir, tickness, is_curvature, file_ext, max_num_of_points_for_a_tiff_file ,
+                         max_num_of_points_for_a_pcd)
+        return None
     xyz_list[:, 2] = 1.0 - xyz_list[:, 2]
 
     # 3. Z 좌표 스케일링 (xyz[2] *= (h/w))
@@ -630,6 +634,8 @@ def tiff_lilst_2_brain_obj(image_filename_list_sub,  tickness:float,
                         max_num_of_points_for_a_tiff_file = 100,
                          max_num_of_points_for_a_pcd  = 5000,
                          device=device, DEBUG=False)
+        if obj_file_name is None:
+            break
         _cur_y += (tickness * num_of_missing_slices_list[_iter_idx])
         #print(obj_file_name)
         obj_dir_list.append(obj_file_name)
@@ -639,6 +645,9 @@ def tiff_lilst_2_brain_obj(image_filename_list_sub,  tickness:float,
     #with multiprocessing.Pool( ) as pool: # Use a pool of 4 processes
     #    pool.starmap(tiff_list_2_pcd, tqdm(tasks_to_run, total=len(tasks_to_run), desc="tiff_list_2_pcd"))
 
+    if obj_file_name is None:
+        shutil.rmtree(obj_slicing_dir)
+        return None
     return obj_dir_list
 
 def distribute_obj_files(data_ids, tickness, num_of_missing_slices:int, obj_dir_root, from_index, to_index, max_num_of_slices, no_gap_between_slices):
@@ -794,6 +803,37 @@ def gen_num_of_missing_slices(mode, from_index, to_index, _num_of_slices):
             adjusted_to_index += 2                            
         adjusted_to_index -= 1
 
+    elif mode == 'Merged':
+        
+        adjusted_to_index = from_index
+        for _i in range(_num_of_slices):
+            adjusted_to_index += _num_of_missing_slices
+            adjusted_to_index += 2                            
+        adjusted_to_index -= 1
+
+
+        _num_of_missing_slices_list = [_num_of_missing_slices] * _num_of_slices
+        _merged_count = random.randint(0, int(_num_of_slices/2))
+        # 2. k번 반복
+        for i in range(_merged_count):
+            # 리스트에 요소가 2개 미만이면 더 이상 합칠 수 없음
+            if len(_num_of_missing_slices_list) < 2:
+                print(f"더 이상 합칠 수 없어 {i}번째에서 중단합니다.")
+                break
+            
+            # 3. 임의의 위치(index) 선정
+            # 연속된 두 수(idx, idx+1)를 선택해야 하므로 범위는 0 ~ (길이-2)
+            idx = random.randint(0, len(_num_of_missing_slices_list) - 2)
+            
+            # 4. 두 수 합치기
+            new_val = _num_of_missing_slices_list[idx] + _num_of_missing_slices_list[idx+1]
+            
+            # 5. 리스트 갱신 (두 요소를 합친 값 하나로 교체)
+            # data[idx]와 data[idx+1]을 삭제하고 new_val을 넣는 것과 동일
+            _num_of_missing_slices_list[idx:idx+2] = [new_val]
+
+
+
     elif mode == 'Gaussian':
 
         mu = _num_of_missing_slices
@@ -863,7 +903,7 @@ def create_dataset(dataset_annotation_file_name, tiff_dir_root, obj_dir_root ):
 
     tickness_of_a_slice_list = [0.003]
     is_curvature_list = [False,True]
-    num_of_missing_slices_dist_list = ['Uniform','Gaussian']
+    num_of_missing_slices_dist_list = ['Merged']
     #num_of_missing_slices_dist_list = ['Uniform']
     #num_of_missing_slices_list = sorted(list(range(0, 6, 1))) #[0, 1, 2, 3, 4, 5] # 10, 15, 20, 15, 30, 35, 40, 45, 50]
     #num_of_missing_slices_list = [50]
@@ -958,15 +998,17 @@ def create_dataset(dataset_annotation_file_name, tiff_dir_root, obj_dir_root ):
                                 _num_of_missing_slices_list_str = [str(item) for item in _num_of_missing_slices_list]
                                 sliced_volumn_dataset['num_of_missing_slices_list'] = ','.join(_num_of_missing_slices_list_str)
                                 sliced_volumn_dataset['is_curvature'] = is_curvature
-                                sliced_volumn_dataset['num_of_slices'] = _num_of_slices
+                                sliced_volumn_dataset['num_of_slices'] = len(_num_of_missing_slices_list)
+                                
                                 sliced_volumn_dataset_list.append(sliced_volumn_dataset)
                                 #if _num_of_slices <= 4 and from_index == _from_index and adjusted_to_index > _to_index - 50:
                                 #    sliced_volumn_dataset_list.append(sliced_volumn_dataset)
 
                                 #obj_2_pcd.tiff_2_obj_parallel(**sliced_volumn_dataset)
+                                
+                                #print(sliced_volumn_dataset['image_filename_list_for_one_sub_brain'])
                                 '''
-                                print(sliced_volumn_dataset['image_filename_list_for_one_sub_brain'])
-                                if len(sliced_volumn_dataset_list) > 3:
+                                if len(sliced_volumn_dataset_list) > 100:
                                     keys_list = [
                                     'obj_dir_root',
                                     'image_filename_list_for_one_sub_brain',
@@ -986,6 +1028,7 @@ def create_dataset(dataset_annotation_file_name, tiff_dir_root, obj_dir_root ):
 
                                     return _df
                                 '''
+                                
 
     #if len(sliced_volumn_dataset_list) >= 100:
     keys_list = [

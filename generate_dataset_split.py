@@ -21,6 +21,7 @@ if __name__ == "__main__":
     parser.add_argument("--obj_dir",required=True, default = '/data/jhahn/data/shape_dataset/data/brain_lightsheet')
     parser.add_argument("--datalist_file_dir",required=False, default='/data/jhahn/data/shape_dataset/data')
     parser.add_argument("--dataname",required=True)
+    parser.add_argument("--dataset",required=True)
 
     #parser.add_argument("--tiff_dir_root",required=True, help="Path to the input TIFF file.")
     args = parser.parse_args()
@@ -52,8 +53,8 @@ if __name__ == "__main__":
     for _dir in _dir_list:
         if not os.path.isdir(obj_dir+"/"+_dir):
             continue
-
-        _dir_list_filtered.append(_dir)
+        if 'Merged' in _dir and 'CURV' in _dir:
+            _dir_list_filtered.append(_dir)
             #print(slice_dirname, exp_info.num_of_slices)
         
         #if exp_info.start_data_id == slice_angle_to_range_map[slice_dirname][0] and exp_info.end_data_id == slice_angle_to_range_map[slice_dirname][1]-1:
@@ -97,7 +98,7 @@ if __name__ == "__main__":
         with open(output_file_name,"w") as output_file:
                     
             for f in sorted(data):
-                output_file.write(f'{dataname}/{f}\n')
+                output_file.write(f'{args.dataset}/{f}\n')
                 #output_file.write(f'brain_lightsheet/{f}\n')
     
     

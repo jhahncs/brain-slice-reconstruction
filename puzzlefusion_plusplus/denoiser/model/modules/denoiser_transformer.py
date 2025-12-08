@@ -108,6 +108,7 @@ class DenoiserTransformer(nn.Module):
             nn.Linear(self.model_channels, self.model_channels // 2),
             nn.SiLU(),
             nn.Linear(self.model_channels // 2, 3),
+            
         )
 
         #self.hardtanh = nn.Hardtanh(min_val=-300, max_val=300)

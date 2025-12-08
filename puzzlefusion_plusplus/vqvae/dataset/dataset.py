@@ -46,6 +46,9 @@ class GeometryPartDataset(Dataset):
         self.shuffle_parts = shuffle_parts  # shuffle part orders
         self.rot_range = rot_range  # rotation range in degree
         self.file_ext=cfg.data.file_ext
+        self.disassemble_mode = self.cfg.disassemble_mode
+        self.disassemble_jitter_ratio = self.cfg.disassemble_jitter_ratio
+
         # list of fracture folder path
         self.data_list = self._read_data(data_fn)
         if overfit > 0:
@@ -143,12 +146,33 @@ class GeometryPartDataset(Dataset):
 
         return connectivity_matrix.astype(bool)
 
-    @staticmethod
-    def _recenter_pc(pc):
+    #@staticmethod
+    def _recenter_pc(self, pc, ratio = 0.001):
         """pc: [N, 3]"""
-        centroid = np.mean(pc, axis=0)
-        pc = pc - centroid[None]
-        return pc, centroid
+
+        if self.disassemble_mode == 'jitter':
+            # 1. 전체 포인트 클라우드의 범위(Bounding Box) 계산
+            # axis=0은 각 열(x, y, z)별로 min/max를 구한다는 의미입니다.
+            p_min = np.min(pc, axis=0)
+            p_max = np.max(pc, axis=0)
+
+            # 2. 대각선 길이(Scale) 계산
+            # 이 길이가 포인트 클라우드의 전체적인 '크기'를 대변합니다.
+            
+            bbox_diagonal = np.linalg.norm(p_max - p_min)
+
+            # 3. 노이즈의 표준편차(sigma) 설정
+            sigma = bbox_diagonal * ratio
+
+            # 4. 가우시안 노이즈 생성 및 적용
+            # loc=평균, scale=표준편차
+            noise = np.random.normal(loc=0.0, scale=sigma, size=(3,))
+            pc = pc + noise
+            return pc, noise
+        else:
+            centroid = np.mean(pc, axis=0)
+            pc = pc - centroid[None]
+            return pc, centroid
     
 
     

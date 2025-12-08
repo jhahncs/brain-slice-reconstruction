@@ -9,8 +9,8 @@ nohup python batch_slicer.py /data/jhahn/data/brain_lightsheet/stack.tif --outpu
 
 
 #DATASET_NAME=${DATASET_TYPE}
-DATASET_NAME=brain_lightsheet_2 
-#DATASET_TYPE=atlas_mouse_brain_50mm_mesh
+DATASET_NAME=LS_CURVE_Gaussian
+DATASET_TYPE=brain_lightsheet_2
 
 EXP_NAME=rot_y_un_e300
 
@@ -18,7 +18,7 @@ EXP_NAME=rot_y_un_e300
 #nohup python myslicer.py /data/jhahn/data/brain_lightsheet/stack.tif /data/jhahn/data/brain_lightsheet/my_brain &
 #nohup python myslicer.py /data/jhahn/data/brain_lightsheet/stack.tif /home/jhahn/puzzlefusion-plusplus/2d_2_pcd/slicer_my_brain &
 
-nohup python obj_2_pcd.py --obj_dir_root /data/jhahn/data/shape_dataset/data/${DATASET_NAME} --tiff_dir_root /data/jhahn/data/brain_lightsheet/slices  > nohup.out 2>&1 &
+nohup python obj_2_pcd.py --obj_dir_root /data/jhahn/data/shape_dataset/data/${DATASET_TYPE} --tiff_dir_root /data/jhahn/data/brain_lightsheet/slices  > nohup.out 2>&1 &
 
 
 

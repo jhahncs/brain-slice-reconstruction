@@ -15,6 +15,7 @@ def init_callbacks(cfg):
     return [checkpoint_monitor, lr_monitor]
 
 from pytorch_lightning.strategies import DDPStrategy
+from omegaconf import OmegaConf,open_dict
 
 @hydra.main(version_base=None, config_path="config/denoiser", config_name="global_config")
 def main(cfg):
@@ -25,6 +26,9 @@ def main(cfg):
     # create directories for training outputs
     os.makedirs(os.path.join(cfg.experiment_output_path, "training"), exist_ok=True)
 
+    with open_dict(cfg):
+        cfg.disassemble_mode = 'jitter'
+        cfg.disassemble_jitter_ratio = 0.01
     # initialize data
     train_loader, val_loader = build_geometry_dataloader(cfg)
     

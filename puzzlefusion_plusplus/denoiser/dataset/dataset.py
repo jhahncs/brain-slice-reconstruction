@@ -49,8 +49,13 @@ class GeometryLatentDataset(Dataset):
         if self.mode == "test":
             self.matching_data_path = self.cfg.data.matching_data_path
         
+
+        self.disassemble_mode = self.cfg.disassemble_mode
+        self.disassemble_jitter_ratio = self.cfg.disassemble_jitter_ratio
+
         self.data_list = []
         #self.data_list = self.data_list[:1]
+        print("data_dir",self.data_dir)
         #print("@@@@@@@@@@@@@",self.data_files)
         for file_name in tqdm(self.data_files):
             data_dict = np.load(os.path.join(self.data_dir, file_name))
@@ -154,11 +159,46 @@ class GeometryLatentDataset(Dataset):
     def __len__(self):
         return len(self.data_list)           
     
-    def _recenter_pc(self, pc):
-        """pc: [N, 3]"""
-        centroid = np.mean(pc, axis=0)
-        pc = pc - centroid[None]
-        return pc, centroid
+    def _recenter_pc(self, pc, ratio=0.001):
+        """
+        pc: [N, 3] Tensor
+        ratio: 전체 크기 대비 이동할 비율
+        """
+
+        if self.disassemble_mode == 'jitter':
+            # 1. 전체 포인트 클라우드의 범위(Bounding Box) 계산
+            # torch.min/max는 (values, indices)를 반환하므로 [0]으로 값만 취함
+            p_min = torch.min(pc, dim=0)[0]
+            p_max = torch.max(pc, dim=0)[0]
+
+            # 2. 대각선 길이(Scale) 계산
+            bbox_diagonal = torch.norm(p_max - p_min)
+
+            # 3. 노이즈의 표준편차(sigma) 설정
+            sigma = bbox_diagonal * ratio
+
+            # 4. 가우시안 노이즈 생성 및 적용 (Global Translation)
+            # torch.randn: 평균 0, 표준편차 1인 정규분포
+            # pc와 같은 device에 생성해야 연산 가능
+            noise = torch.randn(3, device=pc.device) * sigma
+            
+            # Broadcasting: [N, 3] + [3] -> 모든 점에 동일한 noise가 더해짐
+            pc = pc + noise
+            
+            return pc, noise
+
+        elif self.disassemble_mode == 'center':
+            # Centroid 계산
+            centroid = torch.mean(pc, dim=0)
+            
+            # 중심점 빼기
+            # [N, 3] - [3] 브로드캐스팅이 자동으로 되지만, 
+            # 명시적으로 차원을 맞추려면 centroid.unsqueeze(0) 사용
+            pc = pc - centroid
+            
+            return pc, centroid
+
+            
     
     def _rotate_pc_xyz(self, pc):
         """
@@ -172,29 +212,63 @@ class GeometryLatentDataset(Dataset):
         quat_gt = quat_gt[[3, 0, 1, 2]]
         return pc, quat_gt
 
-    @staticmethod
-    def _rotate_pc(pc):
-        """pc: [N, 3]"""
+
+
+    def get_limited_y_rotation_quat(max_angle_degree=45):
+        """
+        max_angle_degree: 제한할 최대 회전 각도 (예: ±10도)
+        """
+        # 1. 각도 생성 (-max ~ +max 사이의 랜덤 라디안)
+        max_rad = np.radians(max_angle_degree)
         
-        pc = torch.from_numpy(pc).float()
+        # (torch.rand(1) - 0.5) * 2  => -1.0 ~ 1.0 범위 생성
+        theta = (torch.rand(1) - 0.5) * 2 * max_rad
 
+        # 2. 반각(Half-angle) 계산
+        half_theta = theta / 2
 
-        
-        #quat_gt = torch.tensor([torch.rand(1),0,1,0])
-        #quat_gt = normalize(quat_gt, p=1.0, dim = 0)
+        # 3. Y축 회전 쿼터니언 생성
+        # 공식: q = [cos(t/2), 0, sin(t/2), 0] (w, x, y, z 순서 가정)
+        w = torch.cos(half_theta)
+        x = torch.zeros_like(theta)
+        y = torch.sin(half_theta)
+        z = torch.zeros_like(theta)
 
+        # 4. 합치기
+        quat_gt = torch.cat([w, x, y, z], dim=0)
 
-        #_rotate_pc_rad torch.Size([3, 4]) tensor([-2.6932,  6.0788,  0.7550])
-        #_rotate_pc torch.Size([4])
-        #random_radian = np.random.uniform(low=0, high=2 * np.pi)
-        #random_radian = ( torch.rand(3) ) * 4 * torch.pi - 2 * torch.pi  
-        #quat_gt = y_axis_rotation_quaternion_from_rad(random_radian) 
-        #quat_gt = torch.squeeze(quat_gt, dim=0)
-        #print('_rotate_pc_rad',quat_gt.shape, random_radian)
-        quat_gt = torch.rand(4)
-        quat_gt[1] = 0
-        quat_gt[3] = 0
+        # 이미 수식적으로 unit quaternion이므로 별도의 정규화 불필요
+        # 하지만 부동소수점 오차 방지를 위해 안전하게 한 번 더 해줄 수 있음
         quat_gt = quat_gt / quat_gt.norm(dim=-1, keepdim=True)
+        
+        return quat_gt
+    def _rotate_pc(self, pc, ratio = 0.001):
+        """pc: [N, 3]"""
+        #pc = torch.from_numpy(pc).float()
+         
+
+        if self.disassemble_mode == 'jitter':
+            
+            #quat_gt = self.get_limited_y_rotation_quat()
+            max_rad = torch.deg2rad(torch.tensor(5.0))
+
+            # (torch.rand(1) - 0.5) * 2  => -1.0 ~ 1.0 범위 생성
+            theta = (torch.rand(1) - 0.5) * 2 * max_rad
+
+            # 2. 반각(Half-angle) 계산
+            half_theta = theta / 2
+
+            quat_gt = torch.rand(4)            
+            quat_gt[2] = torch.sin(half_theta)
+            quat_gt[1] = 0
+            quat_gt[3] = 0
+            quat_gt = quat_gt / quat_gt.norm(dim=-1, keepdim=True)
+            #quat_gt = torch.rand(4)
+        else:
+            quat_gt = torch.rand(4)            
+            quat_gt[1] = 0
+            quat_gt[3] = 0
+            quat_gt = quat_gt / quat_gt.norm(dim=-1, keepdim=True)
         #print('_rotate_pc',quat_gt.shape)
         
         #_mean = torch.mean(pc, axis=0)
@@ -206,7 +280,7 @@ class GeometryLatentDataset(Dataset):
         #pc = Transform3d().compose(tr_r).transform_points(pc)
         
         
-        return pc.cpu().numpy(), quat_gt.cpu().numpy()
+        return pc, quat_gt
 
 
     def _rotate_whole_part_xyz(self, pc):
@@ -232,43 +306,38 @@ class GeometryLatentDataset(Dataset):
         #pc, guat_gt = _rotate_pc(pc)
         
 
-        pc = torch.from_numpy(pc).float()
-
-        #_mean = torch.mean(pc, axis=0)
-        #tr = Translate(-_mean[0],-_mean[1],-_mean[2], dtype=torch.float32)
-        #tr_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32)
-
-        
-        #quat_gt = torch.tensor([torch.rand(1),0,1,0])
-        #quat_gt = normalize(quat_gt, p=1.0, dim = 0)
-        #random_radian = (torch.rand(1) ) * 2 * torch.pi
-        #quat_gt = y_axis_rotation_quaternion_from_rad(random_radian) 
-        #quat_gt = torch.squeeze(quat_gt, dim=0)
-
+        #pc = torch.from_numpy(pc).float()
         quat_gt = torch.rand(4)
         quat_gt[1] = 0
         quat_gt[3] = 0
         quat_gt = quat_gt / quat_gt.norm(dim=-1, keepdim=True)
 
-
-
-        #r = Rotate(quaternion_to_matrix(quat_gt), dtype=torch.float32)
-        #t = Transform3d().compose(rr)
-        #pc = t.transform_points(pc)#.to(torch.float).to(device)
-
-        
-        #_mean = torch.mean(pc, axis=0)
-        #tr = Translate(-_mean[0],-_mean[1],-_mean[2], dtype=torch.float32)
-        #tr_r = Translate(_mean[0],_mean[1],_mean[2], dtype=torch.float32)
         rr = Rotate(quaternion_to_matrix(quat_gt), dtype=torch.float32)
-        #pc = Transform3d().compose(tr).transform_points(pc)
         pc = Transform3d().compose(rr).transform_points(pc)
-        #pc = Transform3d().compose(tr_r).transform_points(pc)
 
-        return pc.cpu().numpy().reshape(P, N, 3), quat_gt.cpu().numpy()
+        #return pc.cpu().numpy().reshape(P, N, 3), quat_gt.cpu().numpy()
+        return pc.reshape(P, N, 3), quat_gt
 
     
     def _recenter_ref(self, pc, ref_part):
+        P, N, _ = pc.shape
+
+        # 1. Reference Index 찾기
+        # torch.where는 튜플을 반환하므로 [0]으로 인덱스 텐서를 가져옴
+        ref_idx = torch.where(ref_part)[0]
+
+        # 2. Centroid 계산
+        # ref_idx.item(): 1개의 원소를 가진 텐서에서 정수 값(Python scalar) 추출
+        # dim=0: [N, 3] -> [3] (N개의 점들에 대한 평균)
+        centroid = torch.mean(pc[ref_idx.item()], dim=0)
+
+        # 3. 빼기 연산 (Broadcasting)
+        # [P, N, 3] - [3] 형태로, 마지막 차원이 같으므로 자동 브로드캐스팅 되어 모든 점(P*N)에서 centroid가 빠짐
+        pc = pc - centroid
+
+        return pc, centroid
+
+    def _recenter_ref_cpu(self, pc, ref_part):
         """
         pc: [P, N, 3]
         """
@@ -278,14 +347,35 @@ class GeometryLatentDataset(Dataset):
         pc = pc - centroid
         return pc, centroid
     
-    def _pad_data(self, data):
+    def _pad_data_cpu(self, data):
         """Pad data to shape [`self.max_num_part`, data.shape[1], ...]."""
         data = np.array(data)
         pad_shape = (self.max_num_part, ) + tuple(data.shape[1:])
         pad_data = np.zeros(pad_shape, dtype=np.float32)
         pad_data[:data.shape[0]] = data
         return pad_data
-    
+
+    def _pad_data(self, data):
+        """Pad data to shape [`self.max_num_part`, data.shape[1], ...]."""
+        
+        # 2. 목표 형상(Shape) 계산
+        # (max_num, D1, D2, ...)
+        pad_shape = (self.max_num_part, ) + data.shape[1:]
+        
+        # 3. 0으로 채워진 텐서 생성
+        # ★중요: 입력 데이터(data)와 같은 device(GPU/CPU)에 만들어야 에러가 안 남
+        pad_data = torch.zeros(pad_shape, dtype=torch.float32, device=data.device)
+        
+        # 4. 데이터 복사
+        # 입력 데이터의 길이(N)를 구함
+        curr_len = data.shape[0]
+        
+        # 만약 현재 데이터가 max보다 길 경우를 대비해 슬라이싱 처리 (안전장치)
+        limit = min(curr_len, self.max_num_part)
+        
+        pad_data[:limit] = data[:limit]
+        
+        return pad_data
 
     def __getitem__(self, idx):
         data_dict = copy.deepcopy(self.data_list[idx])
@@ -297,7 +387,11 @@ class GeometryLatentDataset(Dataset):
         #    print(i,part_pcs_gt[i][:3,:])
         
 
-        ref_part = data_dict['ref_part']
+        ref_part = torch.from_numpy(data_dict['ref_part'])
+
+
+        part_pcs_gt = torch.from_numpy(part_pcs_gt).float()
+
         #for i in range(num_parts):
         #    print(i,np.mean(part_pcs_gt[i], axis=0))
         if self.rotation_1d:
@@ -316,7 +410,7 @@ class GeometryLatentDataset(Dataset):
         
         for i in range(num_parts):
             pc = part_pcs_final[i]
-            pc, gt_trans = self._recenter_pc(pc)
+            pc, gt_trans = self._recenter_pc(pc,self.disassemble_jitter_ratio)
             
             if self.rotation_1d:
                 pc, gt_quat = self._rotate_pc(pc)
@@ -332,10 +426,24 @@ class GeometryLatentDataset(Dataset):
         #for i in range(num_parts):
         #    print(i,cur_pts[i][:3,:])
 
-        cur_pts = self._pad_data(np.stack(cur_pts, axis=0)).astype(np.float32)  # [P, N, 3]
-        cur_quat = self._pad_data(np.stack(cur_quat, axis=0)).astype(np.float32)  # [P, 4]
-        cur_trans = self._pad_data(np.stack(cur_trans, axis=0)).astype(np.float32)  # [P, 3]
-        part_pcs_gt = self._pad_data(np.stack(part_pcs_gt, axis=0)).astype(np.float32) # [P, N, 3]
+
+        cur_pts_tensor = torch.stack(cur_pts, dim=0)
+        cur_quat_tensor = torch.stack(cur_quat, dim=0)
+        cur_trans_tensor = torch.stack(cur_trans, dim=0)
+        #part_pcs_gt_tensor = torch.stack(part_pcs_gt, dim=0)
+
+        # 2. _pad_data 적용 및 float 변환
+        # 주의: _pad_data 함수 내부도 torch.nn.functional.pad 등을 쓰도록 수정 필요
+        cur_pts = self._pad_data(cur_pts_tensor).float()          # [P, N, 3]
+        cur_quat = self._pad_data(cur_quat_tensor).float()        # [P, 4]
+        cur_trans = self._pad_data(cur_trans_tensor).float()      # [P, 3]
+        part_pcs_gt = self._pad_data(part_pcs_gt).float()
+
+
+        #cur_pts = self._pad_data(np.stack(cur_pts, axis=0)).astype(np.float32)  # [P, N, 3]
+        #cur_quat = self._pad_data(np.stack(cur_quat, axis=0)).astype(np.float32)  # [P, 4]
+        #cur_trans = self._pad_data(np.stack(cur_trans, axis=0)).astype(np.float32)  # [P, 3]
+        #part_pcs_gt = self._pad_data(np.stack(part_pcs_gt, axis=0)).astype(np.float32) # [P, N, 3]
 
         
         if self.mode == 'test' and self.denoiser_only_flag is False:        
@@ -357,12 +465,13 @@ class GeometryLatentDataset(Dataset):
         
         
         # Normalize the part pcs
-        scale = np.max(np.abs(cur_pts), axis=(1,2), keepdims=True)
+        # 1. 절댓값 및 최대값 계산
+        # np.max(..., axis=(1,2)) -> torch.amax(..., dim=(1, 2))
+        scale = torch.amax(torch.abs(cur_pts), dim=(1, 2), keepdim=True)
         scale[scale == 0] = 1
         cur_pts = cur_pts / scale
         
         data_dict['part_pcs_gt'] = part_pcs_gt
-        
 
 
         if 'gt' in data_dict:

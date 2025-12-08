@@ -1,11 +1,11 @@
-DATASET_NAME=ABA_10s_1000n_mesh
-DATASET_NAME=brain_lightsheet_2
-#DATASET_TYPE=atlas_mouse_brain_50mm_mesh
-EXP_NAME=rot_y_un_e1000
+DATASET_NAME=CURVE_MERGED
+DATASET_TYPE=brain_lightsheet_2
+EPOCHS=501
+EXP_NAME=e${EPOCHS}
 #cd /home/jhahn/puzzlefusion-plusplus/2d_2_pcd
 #python obj_2_pcd.py --obj_dir_root /data/jhahn/data/shape_dataset/data/brain_lightsheet --tiff_dir_root /data/jhahn/data/brain_lightsheet/slices 
 #cd /home/jhahn/puzzlefusion-plusplus
-#python generate_dataset_split.py --dataname ${DATASET_NAME} --obj_dir /data/jhahn/data/shape_dataset/data/${DATASET_NAME} --datalist_file_dir /data/jhahn/data/shape_dataset/data
+#python generate_dataset_split.py --dataset ${DATASET_TYPE} --dataname ${DATASET_NAME} --obj_dir /data/jhahn/data/shape_dataset/data/${DATASET_TYPE} --datalist_file_dir /data/jhahn/data/shape_dataset/data
 
 
 #python generate_pc_data.py +data.save_pc_data_path=/data/jhahn/data/shape_dataset/pc_data/${DATASET_NAME} \
@@ -22,7 +22,7 @@ python train_vqvae.py \
     data.batch_size=12 \
     experiment_output_path=models/${DATASET_NAME}_${EXP_NAME}/autoencoder \
     data.val_batch_size=12 \
-    trainer.max_epochs=1000\
+    trainer.max_epochs=${EPOCHS} \
     +trainer.devices=2 \
     +trainer.strategy=ddp \
     data.data_fn="$DATASET_NAME.\{\}.txt" \
@@ -35,7 +35,7 @@ python train_vqvae.py \
     experiment_name=${DATASET_NAME}_${EXP_NAME}_denoiser \
     data.batch_size=12 \
     data.val_batch_size=12 \
-    trainer.max_epochs=1000 \
+    trainer.max_epochs=${EPOCHS} \
     experiment_output_path=models/${DATASET_NAME}_${EXP_NAME}/denoiser \
     model.encoder_weights_path=models/${DATASET_NAME}_${EXP_NAME}/autoencoder/training/last.ckpt \
     +trainer.devices=2 \

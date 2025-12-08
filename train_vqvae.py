@@ -12,6 +12,7 @@ def init_callbacks(cfg):
     lr_monitor = LearningRateMonitor(logging_interval="epoch")
     return [checkpoint_monitor, lr_monitor]
 
+from omegaconf import OmegaConf,open_dict
 
 @hydra.main(version_base=None, config_path="config/ae", config_name="global_config")
 def main(cfg):
@@ -26,7 +27,9 @@ def main(cfg):
     # fix the seed
     cfg.device = "cuda:0"
     print(cfg)
-    
+    with open_dict(cfg):
+        cfg.disassemble_mode = 'jitter'
+        cfg.disassemble_jitter_ratio = 0.01
     pl.seed_everything(cfg.train_seed, workers=True)
 
     # create directories for training outputs
